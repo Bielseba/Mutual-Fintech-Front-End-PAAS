@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Menu, X, Bell, UserCircle, Loader2, AlertCircle, CheckCircle, Building2, User as UserIcon, Clock, ChevronRight, PieChart, CreditCard, ArrowLeftRight, Landmark, Link as LinkIcon, QrCode } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
@@ -10,11 +9,13 @@ import { PixTransfer } from './components/PixTransfer';
 import { ViewState, User } from './types';
 import { authService } from './services/authService';
 
-// Custom Mutual Logo Component
-const MutualLogo = ({ className, color = "text-amber-500" }: { className?: string; color?: string }) => (
-  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 80L40 25L50 55L60 25L80 80" stroke="currentColor" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" className={color} />
-  </svg>
+// Custom Mutual Logo Component - Updated to use Image
+const MutualLogo = ({ className, color }: { className?: string; color?: string }) => (
+  <img 
+    src="https://painel.mutualgames.app/public/assets/images/Favicon.png" 
+    alt="Mutual Logo" 
+    className={`object-contain ${className}`} 
+  />
 );
 
 // Premium Loading Screen Component
@@ -26,7 +27,7 @@ const MutualLoader = () => (
       
       {/* Logo Container */}
       <div className="relative w-24 h-24 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 backdrop-blur-xl shadow-2xl animate-bounce-slight">
-         <MutualLogo className="w-12 h-12" color="text-amber-500" />
+         <MutualLogo className="w-16 h-16" />
       </div>
     </div>
     
@@ -279,7 +280,7 @@ const App: React.FC = () => {
             <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-16">
                     <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/10 backdrop-blur-md">
-                        <MutualLogo className="w-8 h-8" color="text-amber-500" />
+                        <MutualLogo className="w-8 h-8" />
                     </div>
                     <span className="text-white font-semibold text-2xl tracking-wide">Mutual</span>
                 </div>
@@ -354,7 +355,7 @@ const App: React.FC = () => {
                      <div className="lg:hidden flex justify-center mb-6">
                          <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-[#0F172A] rounded-xl flex items-center justify-center shadow-lg">
-                                <MutualLogo className="w-8 h-8" color="text-amber-500" />
+                                <MutualLogo className="w-8 h-8" />
                             </div>
                             <span className="text-slate-900 font-semibold text-xl tracking-wide">Mutual</span>
                         </div>
@@ -543,7 +544,7 @@ const App: React.FC = () => {
         <div className="h-24 flex items-center px-8 shrink-0 border-b border-white/5">
           <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
-                <MutualLogo className="w-6 h-6" color="text-amber-500" />
+                <MutualLogo className="w-7 h-7" />
               </div>
               <span className="text-white font-bold text-lg tracking-wide">Mutual</span>
           </div>
@@ -626,7 +627,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
              <div className="lg:hidden">
                  <div className="w-10 h-10 bg-[#0F172A] rounded-lg flex items-center justify-center text-white font-bold">
-                    <MutualLogo className="w-6 h-6" color="text-amber-500" />
+                    <MutualLogo className="w-7 h-7" />
                  </div>
              </div>
              

@@ -1,14 +1,15 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Filter, Download, MoreHorizontal, ArrowUpRight, ArrowDownLeft, Loader2, AlertCircle, FileText, X, Printer, Share2, CheckCircle } from 'lucide-react';
 import { Transaction, TransactionStatus } from '../types';
 import { authService } from '../services/authService';
 
-// Recreated Logo for local usage
-const MutualLogo = ({ className, color = "text-amber-500" }: { className?: string; color?: string }) => (
-  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 80L40 25L50 55L60 25L80 80" stroke="currentColor" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" className={color} />
-  </svg>
+// Recreated Logo for local usage - Updated to Image
+const MutualLogo = ({ className }: { className?: string }) => (
+  <img 
+    src="https://painel.mutualgames.app/public/assets/images/Favicon.png" 
+    alt="Mutual Logo" 
+    className={`object-contain ${className}`} 
+  />
 );
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -257,7 +258,7 @@ export const TransactionHistory: React.FC = () => {
 
                         <div className="flex flex-col items-center mb-8 pt-4">
                             <div className="w-12 h-12 bg-[#0F172A] rounded-xl flex items-center justify-center mb-3">
-                                <MutualLogo className="w-7 h-7" color="text-amber-500" />
+                                <MutualLogo className="w-7 h-7" />
                             </div>
                             <h2 className="text-lg font-bold text-slate-900 uppercase tracking-wide">Comprovante</h2>
                             <p className="text-xs text-slate-400 font-medium">Mutual Fintech Services</p>
