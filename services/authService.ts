@@ -164,25 +164,37 @@ export const authService = {
   },
 
   async register(data: RegisterDTO): Promise<any> {
+    const personType = (data.personType || "PF").toUpperCase()
+
     const payload: any = {
       name: data.name,
       email: data.email,
       password: data.password,
-      personType: data.personType,
-    };
+      personType,
+    }
 
-    if (data.personType === "PF") {
-      if (!data.document)
-        throw new Error("CPF é obrigatório para Pessoa Física.");
-      payload.document = data.document.replace(/\D/g, "");
+    if (personType === "PF") {
+      if (!data.document) {
+        throw new Error("CPF é obrigatório para Pessoa Física.")
+      }
+      payload.document = data.document.replace(/\D/g, "")
     } else {
-      if (!data.cnpj) throw new Error("CNPJ é obrigatório para Pessoa Jurídica.");
-      if (!data.companyName)
-        throw new Error("Razão Social é obrigatória.");
-      payload.cnpj = data.cnpj.replace(/\D/g, "");
-      payload.companyName = data.companyName;
-      payload.tradeName = data.tradeName || null;
-      payload.partnerName = data.partnerName || data.name;
+      if (!data.cnpj) {
+        throw new Error("CNPJ é obrigatório para Pessoa Jurídica.")
+      }
+      if (!data.companyName) {
+        throw new Error("Razão Social é obrigatória.")
+      }
+
+      payload.cnpj = data.cnpj.replace(/\D/g, "")
+      payload.companyName = data.companyName
+      payload.tradeName = data.tradeName || null
+      payload.partnerName =
+        data.partnerName ||
+        data.tradeName ||
+        data.companyName ||
+        data.name ||
+        "Responsável"
     }
 
     const options: RequestInit = {
@@ -193,29 +205,29 @@ export const authService = {
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
-    };
+    }
 
-    const response = await requestWithRouteDiscovery("register", options);
+    const response = await requestWithRouteDiscovery("register", options)
 
-    let responseData;
-    const contentType = response.headers.get("content-type");
+    let responseData
+    const contentType = response.headers.get("content-type")
     if (contentType && contentType.includes("application/json")) {
-      responseData = await response.json();
+      responseData = await response.json()
     } else {
-      throw new Error(`Erro na API de registro (${response.status}).`);
+      throw new Error(`Erro na API de registro (${response.status}).`)
     }
 
     if (!response.ok) {
       const errorMessage =
         responseData.message ||
         responseData.error ||
-        "Erro ao realizar cadastro";
+        "Erro ao realizar cadastro"
       throw new Error(
         Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage
-      );
+      )
     }
 
-    return responseData;
+    return responseData
   },
 
   async getCredentials(
