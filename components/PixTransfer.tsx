@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Check, ChevronRight, User, ShieldCheck, Share2, Copy, AlertCircle, Calendar, ArrowLeft, QrCode, Loader2, Wallet } from 'lucide-react';
+import { Check, User, Share2, Copy, AlertCircle, Loader2, Wallet, QrCode } from 'lucide-react';
 import { authService } from '../services/authService';
 
 interface PixTransferProps {
@@ -12,7 +12,10 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Get user once, but we'll use the ID for effects to avoid infinite loops
   const user = authService.getUser();
+  const userId = user?.id;
 
   // Balance State
   const [currentBalance, setCurrentBalance] = useState<number>(0);
@@ -31,13 +34,14 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
     description: '',
   });
 
-  // Fetch balance on mount for validation
+  // Fetch balance on mount for validation - DEPENDENCY FIXED
   useEffect(() => {
     const fetchBalance = async () => {
-        if (mode === 'withdraw' && user?.id) {
-            setLoadingBalance(true);
+        if (mode === 'withdraw' && userId) {
+            // Only set loading if we don't have a balance yet to prevent UI flicker
+            if (currentBalance === 0) setLoadingBalance(true);
             try {
-                const bal = await authService.getWalletBalance(user.id);
+                const bal = await authService.getWalletBalance(userId);
                 setCurrentBalance(bal);
             } catch (e) {
                 console.error("Failed to fetch balance for validation");
@@ -47,7 +51,7 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
         }
     };
     fetchBalance();
-  }, [mode, user]);
+  }, [mode, userId]); // Use userId string instead of user object
 
   const handleNext = async () => {
       // Logic split based on mode
@@ -75,7 +79,7 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
                  return;
              }
              if (value > currentBalance) {
-                 setError(`Saldo insuficiente. Disponível: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentBalance)}`);
+                 setError(`Saldo insuficiente para esta operação.`);
                  return;
              }
              
@@ -208,7 +212,7 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
         <p className="text-sm text-blue-800">
            {mode === 'pix' 
             ? <><span className="font-bold">Depósito via Pix:</span> O valor será creditado automaticamente na sua carteira assim que o pagamento for confirmado.</>
-            : <><span className="font-bold">Saque via Pix:</span> Transferência instantânea para sua conta bancária.</>
+            : <><span className="font-bold">Saque via Pix:</span> Transferência instantânea para sua conta bancária. O saldo será debitado imediatamente.</>
            }
         </p>
       </div>
@@ -267,24 +271,30 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
               </div>
             )}
 
-            <div>
-              <div className="flex justify-between items-end mb-2">
-                 <label className="block text-sm font-medium text-slate-700">Valor</label>
-                 {mode === 'withdraw' && (
-                     <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
-                         <Wallet className="w-3 h-3" />
-                         Saldo Disponível: {loadingBalance ? '...' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentBalance)}
-                     </span>
-                 )}
+            <div className="relative">
+              <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-slate-700">Valor da Operação</label>
+                  {/* BALANCE BADGE - Placed in header to avoid overlap */}
+                  {mode === 'withdraw' && (
+                      <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                        <Wallet className="w-3 h-3" />
+                        Disponível: {loadingBalance ? '...' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentBalance)}
+                      </div>
+                  )}
               </div>
               <input
                 type="text"
                 placeholder="R$ 0,00"
-                className={`w-full px-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 outline-none text-slate-900 font-semibold text-lg transition-all ${error?.includes('Saldo') ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-amber-500 focus:border-amber-500'}`}
+                className={`w-full px-4 py-4 bg-slate-50 border rounded-xl focus:ring-2 outline-none text-slate-900 font-bold text-2xl transition-all ${error?.includes('Saldo') ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-amber-500 focus:border-amber-500'}`}
                 value={formData.amount}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, '');
-                  const fmt = (parseInt(val || '0') / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                  // Prevent flickering or NaN by handling empty state
+                  if (!val) {
+                      setFormData({...formData, amount: ''});
+                      return;
+                  }
+                  const fmt = (parseInt(val) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   setFormData({...formData, amount: fmt})
                 }}
               />
@@ -338,7 +348,7 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="border border-slate-100 rounded-xl p-4">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block mb-1">Origem</span>
-                <p className="text-slate-900 font-medium">Carteira Mutual</p>
+                <p className="text-slate-900 font-medium">Carteira Omini API</p>
               </div>
               <div className="border border-slate-100 rounded-xl p-4">
                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block mb-1">Destino ({formData.pixKeyType})</span>
@@ -466,8 +476,8 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
                       setWithdrawResult(null);
                       setFormData({ ...formData, amount: '', pixKey: '' });
                       // Re-fetch balance if needed
-                      if (mode === 'withdraw' && user?.id) {
-                          authService.getWalletBalance(user.id).then(bal => setCurrentBalance(bal));
+                      if (mode === 'withdraw' && userId) {
+                          authService.getWalletBalance(userId).then(bal => setCurrentBalance(bal));
                       }
                   }} 
                   className="px-6 py-3 border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors"

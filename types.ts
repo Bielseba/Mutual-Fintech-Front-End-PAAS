@@ -28,6 +28,16 @@ export interface Transaction {
   pixKey?: string;
 }
 
+export interface MedAlert {
+  id: string;
+  transactionId: string;
+  amount: number;
+  reason: 'FRAUD' | 'SCAM' | 'HACK' | 'OTHER';
+  status: 'OPEN' | 'ANALYSIS' | 'CONCLUDED' | 'CANCELLED';
+  requesterBank: string;
+  openedAt: string;
+  deadline: string;
+}
 
 export interface User {
   id: string;
@@ -64,6 +74,7 @@ export interface WalletData {
   userId: string | number;
   currency: string;
   balance: number;
+  blockedBalance?: number;
 }
 
 
@@ -89,7 +100,9 @@ export type ViewState =
   | 'integration'
   | 'pix'
   | 'withdraw'
-  | 'payment-links';
+  | 'payment-links'
+  | 'med'
+  | 'fees';
 
 
 export interface AuthResponse {

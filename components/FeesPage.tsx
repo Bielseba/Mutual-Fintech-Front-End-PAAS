@@ -1,0 +1,62 @@
+
+import React from 'react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle, Wallet } from 'lucide-react';
+
+export const FeesPage: React.FC = () => {
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header with Pricing Model Info */}
+      <div className="bg-[#0F172A] rounded-[2rem] p-8 text-white relative overflow-hidden shadow-2xl">
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-600/20 rounded-full blur-[100px] -mr-20 -mt-20"></div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider mb-3 border border-indigo-500/20">
+                    <CheckCircle className="w-3 h-3" /> Modelo Pay-per-use
+                </div>
+                <h1 className="text-3xl font-bold mb-2">Tabela de Tarifas</h1>
+                <p className="text-slate-400 max-w-lg">
+                    Simplicidade para o seu negócio. Sem letras miúdas, sem surpresas no final do mês.
+                </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-center min-w-[150px]">
+                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Custo Mensal</p>
+                <p className="text-2xl font-bold text-emerald-400 flex items-center justify-center gap-2">
+                    R$ 0,00
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">Isento de mensalidade</p>
+            </div>
+        </div>
+      </div>
+
+      {/* Main Pricing Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          {/* Pix In */}
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <ArrowDownLeft className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Pix Entrada (Cash-in)</h3>
+              <p className="text-slate-500 text-sm mb-6 max-w-xs">Recebimento via QR Code estático ou dinâmico.</p>
+              <div className="flex items-baseline gap-1 mt-auto">
+                  <span className="text-4xl font-bold text-slate-900">R$ 0,50</span>
+                  <span className="text-slate-400 text-sm font-medium">/ transação</span>
+              </div>
+          </div>
+
+          {/* Pix Out */}
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <ArrowUpRight className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Pix Saída (Cash-out)</h3>
+              <p className="text-slate-500 text-sm mb-6 max-w-xs">Transferências para outras contas e chaves Pix.</p>
+              <div className="flex items-baseline gap-1 mt-auto">
+                  <span className="text-4xl font-bold text-slate-900">R$ 0,50</span>
+                  <span className="text-slate-400 text-sm font-medium">/ transação</span>
+              </div>
+          </div>
+      </div>
+    </div>
+  );
+};

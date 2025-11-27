@@ -164,37 +164,25 @@ export const authService = {
   },
 
   async register(data: RegisterDTO): Promise<any> {
-    const personType = (data.personType || "PF").toUpperCase()
-
     const payload: any = {
       name: data.name,
       email: data.email,
       password: data.password,
-      personType,
-    }
+      personType: data.personType,
+    };
 
-    if (personType === "PF") {
-      if (!data.document) {
-        throw new Error("CPF é obrigatório para Pessoa Física.")
-      }
-      payload.document = data.document.replace(/\D/g, "")
+    if (data.personType === "PF") {
+      if (!data.document)
+        throw new Error("CPF é obrigatório para Pessoa Física.");
+      payload.document = data.document.replace(/\D/g, "");
     } else {
-      if (!data.cnpj) {
-        throw new Error("CNPJ é obrigatório para Pessoa Jurídica.")
-      }
-      if (!data.companyName) {
-        throw new Error("Razão Social é obrigatória.")
-      }
-
-      payload.cnpj = data.cnpj.replace(/\D/g, "")
-      payload.companyName = data.companyName
-      payload.tradeName = data.tradeName || null
-      payload.partnerName =
-        data.partnerName ||
-        data.tradeName ||
-        data.companyName ||
-        data.name ||
-        "Responsável"
+      if (!data.cnpj) throw new Error("CNPJ é obrigatório para Pessoa Jurídica.");
+      if (!data.companyName)
+        throw new Error("Razão Social é obrigatória.");
+      payload.cnpj = data.cnpj.replace(/\D/g, "");
+      payload.companyName = data.companyName;
+      payload.tradeName = data.tradeName || null;
+      payload.partnerName = data.partnerName || data.name;
     }
 
     const options: RequestInit = {
@@ -205,29 +193,29 @@ export const authService = {
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
-    }
+    };
 
-    const response = await requestWithRouteDiscovery("register", options)
+    const response = await requestWithRouteDiscovery("register", options);
 
-    let responseData
-    const contentType = response.headers.get("content-type")
+    let responseData;
+    const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
-      responseData = await response.json()
+      responseData = await response.json();
     } else {
-      throw new Error(`Erro na API de registro (${response.status}).`)
+      throw new Error(`Erro na API de registro (${response.status}).`);
     }
 
     if (!response.ok) {
       const errorMessage =
         responseData.message ||
         responseData.error ||
-        "Erro ao realizar cadastro"
+        "Erro ao realizar cadastro";
       throw new Error(
         Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage
-      )
+      );
     }
 
-    return responseData
+    return responseData;
   },
 
   async getCredentials(
@@ -355,6 +343,7 @@ export const authService = {
   async getWalletLedger(userId: string | number): Promise<Transaction[]> {
     const token = this.getToken();
     if (!token) throw new Error("Sessão expirada.");
+    const user = this.getUser();
 
     const url = `${API_URL}/users/${userId}/wallet/ledger`;
     
@@ -375,17 +364,64 @@ export const authService = {
         const json = await response.json();
         const rawTransactions = json.data || json.transactions || json.ledger || [];
         
-        // Map backend fields to frontend Transaction interface
-        return rawTransactions.map((tx: any) => ({
-            id: tx.id || tx._id || tx.transactionId,
-            amount: Number(tx.amount || 0),
-            date: tx.created_at || tx.date || tx.createdAt || new Date().toISOString(),
-            description: tx.description || (tx.type === 'CREDIT' ? 'Depósito Pix' : 'Saque Pix'),
-            status: tx.status || 'COMPLETED',
-            type: tx.type || (Number(tx.amount) > 0 ? 'CREDIT' : 'DEBIT'),
-            customerName: tx.description || 'Transação', // Fallback
-            pixKey: tx.pixKey || tx.sender || tx.recipient || '-'
-        }));
+        // ✨ MAPEAR DADOS PARA VISUALIZAÇÃO PROFISSIONAL
+        return rawTransactions.map((tx: any) => {
+            const amount = Number(tx.amount || 0);
+            const isPositive = amount > 0;
+            const originalDesc = (tx.description || "").toLowerCase();
+            
+            // 🧹 SANITIZAÇÃO DE DESCRIÇÃO (Remove lixo técnico)
+            let prettyDesc = originalDesc
+                .replace(/starpago/gi, '') // Remove provider
+                .replace(/merorderno=[\w-]+/gi, '') // Remove IDs longos
+                .replace(/user-\d+-/gi, '') // Remove prefixos user
+                .replace(/wd-\d+-/gi, '') // Remove prefixos withdraw
+                .replace(/[\-_]/g, ' ') // Troca - e _ por espaço
+                .trim();
+            
+            // Categorização e Tipagem Estrita
+            let prettyType = 'UNKNOWN';
+
+            if (originalDesc.includes('pix') && isPositive) {
+                prettyDesc = "Depósito via Pix";
+                prettyType = 'CREDIT';
+            } else if (originalDesc.includes('pix') && !isPositive) {
+                prettyDesc = "Envio Pix";
+                prettyType = 'DEBIT';
+            } else if (originalDesc.includes('deposit') || originalDesc.includes('depósito')) {
+                prettyDesc = "Depósito em Conta";
+                prettyType = 'CREDIT';
+            } else if (originalDesc.includes('withdraw') || originalDesc.includes('saque')) {
+                prettyDesc = "Saque Pix Realizado";
+                prettyType = 'DEBIT';
+            } else if (originalDesc.includes('refund') || originalDesc.includes('estorno')) {
+                prettyDesc = "Estorno/Devolução";
+                prettyType = 'CREDIT';
+            }
+
+            // Fallback para descrição limpa se não cair nas regras acima
+            if (!prettyDesc) prettyDesc = "Transferência";
+            
+            // Capitalize first letter
+            prettyDesc = prettyDesc.charAt(0).toUpperCase() + prettyDesc.slice(1);
+
+            // Tratamento de Metadados para Comprovante
+            const senderName = isPositive ? (tx.sender || "Pagador Externo") : (user?.name || "Sua Conta");
+            const recipientName = !isPositive ? (tx.recipient || "Beneficiário Externo") : (user?.name || "Sua Conta");
+
+            return {
+                id: tx.id || tx._id || tx.transactionId || `TX-${Math.random().toString(36).substr(2,9).toUpperCase()}`,
+                amount: amount,
+                date: tx.created_at || tx.date || tx.createdAt || new Date().toISOString(),
+                description: prettyDesc, // Descrição LIMPA
+                status: tx.status || 'COMPLETED',
+                type: prettyType, // Tipo ESTRITO (CREDIT/DEBIT)
+                sender: senderName,
+                recipient: recipientName,
+                customerName: isPositive ? senderName : recipientName,
+                pixKey: tx.pixKey || tx.key || '-'
+            };
+        });
 
     } catch (err) {
         console.error("Failed to fetch ledger:", err);

@@ -1,10 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
-/**
- * Gemini Client (frontend safe)
- * - Usa import.meta.env no Vite
- * - Evita crash se API key estiver ausente
- */
+// Initialize Gemini Client
+// NOTE: process.env.API_KEY is assumed to be injected by the environment.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const SYSTEM_INSTRUCTION = `
 Você é o assistente virtual oficial do 'Mutual Gateway', uma plataforma de pagamentos com foco em Pix.
@@ -18,46 +16,26 @@ Detalhes da API (Simulado para contexto):
   - GET /transactions/{id} (Verifica status)
   - POST /auth/token (Obtém token usando App ID e Secret)
 
-Responda de forma concisa, profissional e em Português do Brasil. 
-Se o usuário perguntar sobre código, forneça exemplos em Node.js ou cURL.
+Responda de forma concisa, profissional e em Português do Brasil. Se o usuário perguntar sobre código, forneça exemplos em Node.js ou cURL.
 `;
 
-// --- IMPORTANTÍSSIMO: FRONT-END NÃO PODE USAR process.env --- //
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-// Client seguro — só cria se tiver key
-let ai: GoogleGenAI | null = null;
-
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-} else {
-  console.warn("⚠ VITE_GEMINI_API_KEY ausente — ChatBot desativado.");
-}
-
-export const sendMessageToGemini = async (
-  message: string,
-  history: { role: "user" | "model"; text: string }[]
-): Promise<string> => {
+export const sendMessageToGemini = async (message: string, history: { role: 'user' | 'model'; text: string }[]): Promise<string> => {
   try {
-    if (!ai) {
-      return "⚠ O assistente está temporariamente offline (API Key ausente).";
-    }
-
     const chat = ai.chats.create({
-      model: "gemini-2.5-flash",
+      model: 'gemini-2.5-flash',
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
       },
-      history: history.map((h) => ({
+      history: history.map(h => ({
         role: h.role,
         parts: [{ text: h.text }],
       })),
     });
 
     const result = await chat.sendMessage({ message });
-    return result.text ?? "Sem resposta.";
+    return result.text;
   } catch (error) {
-    console.error("❌ Erro no Gemini:", error);
-    return "❌ Estou enfrentando dificuldades técnicas agora. Tente novamente em instantes.";
+    console.error("Error querying Gemini:", error);
+    return "Desculpe, estou enfrentando dificuldades técnicas no momento. Por favor, tente novamente mais tarde.";
   }
 };
