@@ -1,4 +1,3 @@
-
 import {
   LoginDTO,
   RegisterDTO,
@@ -6,6 +5,7 @@ import {
   User,
   normalizeUser,
   Transaction,
+  UserFees,
 } from "../types";
 
 // BACK DO USER-SERVICE PUBLICA TUDO DEBAIXO DE /api
@@ -340,93 +340,109 @@ export const authService = {
     }
   },
 
-  async getWalletLedger(userId: string | number): Promise<Transaction[]> {
-    const token = this.getToken();
-    if (!token) throw new Error("Sessão expirada.");
-    const user = this.getUser();
+  async getWalletLedger(): Promise<Transaction[]> {
+    const token = this.getToken()
+    if (!token) throw new Error("Sessão expirada.")
 
-    const url = `${API_URL}/users/${userId}/wallet/ledger`;
-    
-    try {
-        const response = await fetchWithRetry(url, {
-            method: "GET",
-            mode: "cors",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-        });
+    const url = `${API_URL}/me/wallet/ledger`
 
-        if (!response.ok) {
-             throw new Error("Erro ao buscar extrato");
-        }
+    const response = await fetch(url, {
+      method: "GET",
+      mode: "cors",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    })
 
-        const json = await response.json();
-        const rawTransactions = json.data || json.transactions || json.ledger || [];
-        
-        // ✨ MAPEAR DADOS PARA VISUALIZAÇÃO PROFISSIONAL
-        return rawTransactions.map((tx: any) => {
-            const amount = Number(tx.amount || 0);
-            const isPositive = amount > 0;
-            const originalDesc = (tx.description || "").toLowerCase();
-            
-            // 🧹 SANITIZAÇÃO DE DESCRIÇÃO (Remove lixo técnico)
-            let prettyDesc = originalDesc
-                .replace(/starpago/gi, '') // Remove provider
-                .replace(/merorderno=[\w-]+/gi, '') // Remove IDs longos
-                .replace(/user-\d+-/gi, '') // Remove prefixos user
-                .replace(/wd-\d+-/gi, '') // Remove prefixos withdraw
-                .replace(/[\-_]/g, ' ') // Troca - e _ por espaço
-                .trim();
-            
-            // Categorização e Tipagem Estrita
-            let prettyType = 'UNKNOWN';
-
-            if (originalDesc.includes('pix') && isPositive) {
-                prettyDesc = "Depósito via Pix";
-                prettyType = 'CREDIT';
-            } else if (originalDesc.includes('pix') && !isPositive) {
-                prettyDesc = "Envio Pix";
-                prettyType = 'DEBIT';
-            } else if (originalDesc.includes('deposit') || originalDesc.includes('depósito')) {
-                prettyDesc = "Depósito em Conta";
-                prettyType = 'CREDIT';
-            } else if (originalDesc.includes('withdraw') || originalDesc.includes('saque')) {
-                prettyDesc = "Saque Pix Realizado";
-                prettyType = 'DEBIT';
-            } else if (originalDesc.includes('refund') || originalDesc.includes('estorno')) {
-                prettyDesc = "Estorno/Devolução";
-                prettyType = 'CREDIT';
-            }
-
-            // Fallback para descrição limpa se não cair nas regras acima
-            if (!prettyDesc) prettyDesc = "Transferência";
-            
-            // Capitalize first letter
-            prettyDesc = prettyDesc.charAt(0).toUpperCase() + prettyDesc.slice(1);
-
-            // Tratamento de Metadados para Comprovante
-            const senderName = isPositive ? (tx.sender || "Pagador Externo") : (user?.name || "Sua Conta");
-            const recipientName = !isPositive ? (tx.recipient || "Beneficiário Externo") : (user?.name || "Sua Conta");
-
-            return {
-                id: tx.id || tx._id || tx.transactionId || `TX-${Math.random().toString(36).substr(2,9).toUpperCase()}`,
-                amount: amount,
-                date: tx.created_at || tx.date || tx.createdAt || new Date().toISOString(),
-                description: prettyDesc, // Descrição LIMPA
-                status: tx.status || 'COMPLETED',
-                type: prettyType, // Tipo ESTRITO (CREDIT/DEBIT)
-                sender: senderName,
-                recipient: recipientName,
-                customerName: isPositive ? senderName : recipientName,
-                pixKey: tx.pixKey || tx.key || '-'
-            };
-        });
-
-    } catch (err) {
-        console.error("Failed to fetch ledger:", err);
-        return [];
+    if (!response.ok) {
+      throw new Error("Erro ao buscar histórico da carteira.")
     }
+
+    const json = await response.json()
+
+    const ledger = json.ledger || json.data || json.entries || []
+    if (!Array.isArray(ledger)) return []
+
+    const currentUser = this.getUser();
+    const currentUserName = currentUser?.name || 'Titular da Conta';
+
+    return ledger.map((tx: any) => {
+      const rawAmount = tx.amount ?? tx.value ?? tx.valor ?? 0
+      const amount =
+        typeof rawAmount === "string"
+          ? parseFloat(rawAmount)
+          : Number(rawAmount) || 0
+
+      const direction = String(tx.direction || tx.type || "").toUpperCase()
+
+      const isCredit =
+        direction === "CREDIT" ||
+        direction === "IN" ||
+        direction === "DEPOSIT" ||
+        amount > 0
+
+      const isDebit =
+        direction === "DEBIT" ||
+        direction === "OUT" ||
+        direction === "WITHDRAW" ||
+        amount < 0
+
+      const type = isCredit && !isDebit ? "CREDIT" : "DEBIT"
+
+      let rawDesc = String(tx.description || "");
+      let cleanDesc = rawDesc;
+
+      cleanDesc = cleanDesc
+        .replace(/STARPAGO/gi, "")
+        .replace(/merOrderNo=[^ ]+/gi, "")
+        .replace(/user-\d+[^ ]*/gi, "")
+        .replace(/wd-\d+[^ ]*/gi, "")
+        .replace(/[-_]/g, " ")
+        .trim();
+
+      const lowerDesc = cleanDesc.toLowerCase();
+      
+      if (lowerDesc.includes('saque') || lowerDesc.includes('withdraw')) {
+          cleanDesc = "Saque via Pix";
+      } else if (lowerDesc.includes('deposito') || lowerDesc.includes('depósito') || lowerDesc.includes('deposit')) {
+          cleanDesc = "Depósito Recebido";
+      } else if (lowerDesc.includes('taxa') || lowerDesc.includes('fee')) {
+          cleanDesc = "Tarifa Operacional";
+      } else if (!cleanDesc || cleanDesc.length < 3) {
+          cleanDesc = type === 'CREDIT' ? "Entrada Pix" : "Transferência Enviada";
+      }
+
+      cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+
+      let sender = tx.sender || "";
+      let recipient = tx.recipient || "";
+
+      if (type === 'CREDIT') {
+          if (!recipient) recipient = currentUserName;
+          if (!sender) sender = "Remetente Externo"; 
+      } else {
+          if (!sender) sender = currentUserName;
+          if (!recipient) recipient = "Destinatário Externo";
+      }
+
+      return {
+        id:
+          tx.id ||
+          tx._id ||
+          tx.transactionId ||
+          `TX-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+        amount,
+        date: tx.created_at || tx.date || tx.createdAt || new Date().toISOString(),
+        description: cleanDesc,
+        status: tx.status || "COMPLETED",
+        type,
+        customerName: tx.customerName || tx.clientName || "",
+        pixKey: tx.pixKey || tx.key || "",
+        sender: sender,
+        recipient: recipient,
+      }
+    })
   },
 
   async createPixCharge(amount: number): Promise<{
@@ -441,7 +457,6 @@ export const authService = {
     if (!token) throw new Error("Sessão expirada. Faça login novamente.");
     if (!user) throw new Error("Usuário não autenticado. Faça login novamente.");
 
-    // ⚙️ EXTRAI O ID DO USER DE FORMA CONFIÁVEL
     const rawUserId: any =
       (user as any).id ??
       (user as any).userId ??
@@ -453,7 +468,6 @@ export const authService = {
       throw new Error("ID do usuário não encontrado na sessão. Tente relogar.");
     }
 
-    // 🔢 CONVERTE PARA NÚMERO (GATEWAY ESPERA INTEGER)
     const numericId = parseInt(String(rawUserId), 10);
     if (!Number.isFinite(numericId) || numericId <= 0) {
       console.error("User ID inválido para operação financeira:", rawUserId);
@@ -462,20 +476,19 @@ export const authService = {
 
     const userIdToSend: number = numericId;
 
-    // 📄 DADOS DO PAGADOR
     const rawCPF = (user.document || (user as any).cpf || (user as any).cnpj || "").replace(/\D/g, "");
     const payerCPF = rawCPF.length >= 11 ? rawCPF : "00000000000";
     const payerName = user.name || "Cliente Mutual";
 
-    // 💣 PAYLOAD ROBUSTO: Envia userId em todos os níveis (camelCase e snake_case)
     const payload = {
-      userId: userIdToSend,        // Padrão CamelCase
-      user_id: userIdToSend,       // Padrão SnakeCase (Fallback comum)
+      userId: userIdToSend,
+      user_id: userIdToSend,
+      operatorId: 1, // Fix: Add operatorId to satisfy backend requirements
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX",
       extra: {
-        userId: userIdToSend,      // Redundância dentro de extra
+        userId: userIdToSend,
         payerName: payerName,
         payerCPF: payerCPF,
       }
@@ -484,7 +497,6 @@ export const authService = {
     console.log("[AuthService] Payload Pix:", JSON.stringify(payload));
 
     const endpoints = [
-      // 1️⃣ PRIORIDADE: USER-SERVICE (Proxy estável para evitar CORS)
       `https://mutual-fintech-user-service.vercel.app/api/wallet/deposit/pix`,
     ];
 
@@ -577,7 +589,6 @@ export const authService = {
     if (!token) throw new Error("Sessão expirada. Faça login novamente.");
     if (!user) throw new Error("Usuário não autenticado. Faça login novamente.");
 
-    // 🔎 ID do usuário
     const rawUserId: any =
       (user as any).id ??
       (user as any).userId ??
@@ -597,7 +608,6 @@ export const authService = {
 
     const userIdToSend = numericId;
 
-    // 📄 Dados do titular (CPF / Nome)
     const rawCPF = (
       (user as any).document ||
       (user as any).cpf ||
@@ -608,16 +618,11 @@ export const authService = {
     const payerCPF = rawCPF.length >= 11 ? rawCPF : "00000000000";
     const payerName = (user as any).name || "Cliente Mutual";
 
-    // 📦 SHOTGUN PAYLOAD: Satisfies BOTH Gateway and User Service validators
-    // Gateway expects: bankCode, accountNumber, operatorId
-    // User Service expects: key, keyType, bankCode
     const payload = {
-      // Shared
       userId: userIdToSend,
       amount: Number(amount),
       currency: "BRL",
       
-      // Gateway Specific
       operatorId: 1, 
       orderId: `wd-${Date.now()}`,
       accountNumber: pixKey,
@@ -628,10 +633,9 @@ export const authService = {
         document: payerCPF,
       },
 
-      // User Service Specific (Redundant but required by validator)
       key: pixKey,
       keyType: keyType,
-      bankCode: keyType, // Mapped automatically as per instruction
+      bankCode: keyType,
       holder: {
         name: payerName.toUpperCase(),
         document: payerCPF,
@@ -647,10 +651,8 @@ export const authService = {
       JSON.stringify(payload, null, 2)
     );
 
-    // 🔗 GATEWAY ENDPOINT
     const endpoints = [
       `https://mutual-fintech-api-gateway.vercel.app/api/payout`,
-      // Fallback
       `${API_URL}/wallet/withdraw/pix` 
     ];
 
@@ -743,6 +745,39 @@ export const authService = {
             qrCode: '',
             qrCodeImage: ''
         };
+    }
+  },
+
+  async getMyFees(): Promise<UserFees | null> {
+    const token = this.getToken();
+    if (!token) return null;
+
+    const url = `${API_URL}/me/fees`;
+
+    try {
+      const response = await fetchWithRetry(url, {
+        method: "GET",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) return null;
+
+      const json = await response.json();
+      if (json.ok && json.data) {
+        return {
+            userId: Number(json.data.userId),
+            pixInPercent: Number(json.data.pixInPercent),
+            pixOutPercent: Number(json.data.pixOutPercent)
+        };
+      }
+      return null;
+    } catch (e) {
+      console.error("Failed to fetch fees", e);
+      return null;
     }
   },
 

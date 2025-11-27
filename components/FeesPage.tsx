@@ -1,8 +1,27 @@
 
-import React from 'react';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle, Wallet } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle, Wallet, Loader2 } from 'lucide-react';
+import { authService } from '../services/authService';
+import { UserFees } from '../types';
 
 export const FeesPage: React.FC = () => {
+  const [fees, setFees] = useState<UserFees | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchFees = async () => {
+      try {
+        const data = await authService.getMyFees();
+        setFees(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchFees();
+  }, []);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header with Pricing Model Info */}
@@ -39,8 +58,15 @@ export const FeesPage: React.FC = () => {
               <h3 className="text-xl font-bold text-slate-900 mb-2">Pix Entrada (Cash-in)</h3>
               <p className="text-slate-500 text-sm mb-6 max-w-xs">Recebimento via QR Code estático ou dinâmico.</p>
               <div className="flex items-baseline gap-1 mt-auto">
-                  <span className="text-4xl font-bold text-slate-900">R$ 0,50</span>
-                  <span className="text-slate-400 text-sm font-medium">/ transação</span>
+                  {isLoading ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                  ) : (
+                    <>
+                        <span className="text-4xl font-bold text-slate-900">
+                            {fees?.pixInPercent ? fees.pixInPercent.toFixed(2) : '0.00'}%
+                        </span>
+                    </>
+                  )}
               </div>
           </div>
 
@@ -52,8 +78,15 @@ export const FeesPage: React.FC = () => {
               <h3 className="text-xl font-bold text-slate-900 mb-2">Pix Saída (Cash-out)</h3>
               <p className="text-slate-500 text-sm mb-6 max-w-xs">Transferências para outras contas e chaves Pix.</p>
               <div className="flex items-baseline gap-1 mt-auto">
-                  <span className="text-4xl font-bold text-slate-900">R$ 0,50</span>
-                  <span className="text-slate-400 text-sm font-medium">/ transação</span>
+                  {isLoading ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                  ) : (
+                    <>
+                        <span className="text-4xl font-bold text-slate-900">
+                            {fees?.pixOutPercent ? fees.pixOutPercent.toFixed(2) : '0.00'}%
+                        </span>
+                    </>
+                  )}
               </div>
           </div>
       </div>

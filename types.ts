@@ -28,15 +28,28 @@ export interface Transaction {
   pixKey?: string;
 }
 
+export interface MedSummary {
+  openCount: number;
+  blockedAmount: number;
+  totalCount: number;
+  hasMed: boolean;
+}
+
 export interface MedAlert {
   id: string;
   transactionId: string;
   amount: number;
-  reason: 'FRAUD' | 'SCAM' | 'HACK' | 'OTHER';
-  status: 'OPEN' | 'ANALYSIS' | 'CONCLUDED' | 'CANCELLED';
+  reason: string;
+  status: 'OPEN' | 'UNDER_REVIEW' | 'DEFENSE_SENT' | 'ACCEPTED' | 'REJECTED' | 'ANALYSIS' | 'CONCLUDED' | 'CANCELLED';
   requesterBank: string;
   openedAt: string;
   deadline: string;
+}
+
+export interface UserFees {
+  userId: number;
+  pixInPercent: number;
+  pixOutPercent: number;
 }
 
 export interface User {

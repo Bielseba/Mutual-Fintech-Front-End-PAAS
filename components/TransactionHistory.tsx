@@ -63,7 +63,10 @@ export const TransactionHistory: React.FC = () => {
         setIsLoading(true);
         try {
             const user = authService.getUser();
-            if (user?.id) setTransactions(await authService.getWalletLedger(user.id));
+            if (user?.id) {
+                const ledger = await authService.getWalletLedger();
+                setTransactions(ledger);
+            }
         } catch (err) { setError('Falha ao carregar histórico.'); } 
         finally { setIsLoading(false); }
   };
@@ -566,7 +569,7 @@ export const TransactionHistory: React.FC = () => {
       
       {/* PROFESSIONAL RECEIPT MODAL */}
       {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[100dvh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[100dvh] grid place-items-center">
             <div className="bg-[#F8FAFC] w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh] relative animate-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center p-6 bg-white border-b border-slate-100 shrink-0">
                     <h3 className="font-bold text-slate-900">Comprovante de Transação</h3>

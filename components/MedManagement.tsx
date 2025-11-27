@@ -1,55 +1,103 @@
-
-import React, { useState } from 'react';
-import { ShieldAlert, AlertTriangle, Lock, Gavel, Search, CheckCircle, UploadCloud, X, FileText, Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldAlert, AlertTriangle, Lock, Gavel, Search, CheckCircle, UploadCloud, X, Send, MoreHorizontal } from 'lucide-react';
 import { MedAlert } from '../types';
+import { adminService } from '../services/adminService';
 
 export const MedManagement: React.FC = () => {
-  // Mock Data
-  const [alerts, setAlerts] = useState<MedAlert[]>([
-    {
-        id: 'MED-2025-001',
-        transactionId: 'TX-982374928374',
-        amount: 1250.00,
-        reason: 'SCAM',
-        status: 'OPEN',
-        requesterBank: 'Banco Inter',
-        openedAt: new Date().toISOString(),
-        deadline: new Date(Date.now() + 86400000 * 2).toISOString() // 2 days from now
-    },
-    {
-        id: 'MED-2025-002',
-        transactionId: 'TX-123123123123',
-        amount: 450.00,
-        reason: 'HACK',
-        status: 'ANALYSIS',
-        requesterBank: 'Nubank',
-        openedAt: new Date(Date.now() - 86400000).toISOString(),
-        deadline: new Date(Date.now() + 86400000).toISOString()
-    }
-  ]);
-
+  const [alerts, setAlerts] = useState<MedAlert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<MedAlert | null>(null);
   const [defenseText, setDefenseText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [medSummary, setMedSummary] = useState<any>(null);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadMed = async () => {
+      try {
+        const summary = await adminService.getMedSummary();
+        setMedSummary(summary);
+        
+        const list = await adminService.getMedList({ status: 'OPEN' });
+        // Ensure list is an array before setting state
+        setAlerts(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error("Failed to load MED data", err);
+        setAlerts([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadMed();
+  }, []);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const handleOpenDefense = (alert: MedAlert) => {
-      setSelectedAlert(alert);
-      setDefenseText('');
+  const handleOpenDefense = async (alertId: string) => {
+    try {
+        setIsLoading(true);
+        const detail = await adminService.getMedDetail(alertId);
+        setSelectedAlert(detail);
+        setDefenseText('');
+        setActionMenuId(null);
+    } catch (e) {
+        console.error("Error fetching detail", e);
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleSubmitDefense = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!selectedAlert) return;
+      
       setIsSubmitting(true);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setAlerts(alerts.map(a => a.id === selectedAlert?.id ? { ...a, status: 'ANALYSIS' } : a));
-      setIsSubmitting(false);
-      setSelectedAlert(null);
+      try {
+          await adminService.sendMedDefense(selectedAlert.id, { defenseText });
+          const list = await adminService.getMedList({ status: 'OPEN' });
+          setAlerts(Array.isArray(list) ? list : []);
+          setSelectedAlert(null);
+      } catch (e) {
+          console.error("Error sending defense", e);
+      } finally {
+          setIsSubmitting(false);
+      }
   };
+
+  const handleAction = async (id: string, action: 'ACCEPT_REFUND' | 'REJECT_REFUND' | 'MARK_UNDER_REVIEW') => {
+      try {
+          await adminService.medAction(id, { action });
+          const list = await adminService.getMedList({ status: 'OPEN' });
+          setAlerts(Array.isArray(list) ? list : []);
+          setActionMenuId(null);
+      } catch (e) {
+          console.error("Action failed", e);
+      }
+  };
+
+  const getStatusBadge = (status: string) => {
+      switch (status) {
+          case 'OPEN': return 'bg-red-100 text-red-700';
+          case 'UNDER_REVIEW': return 'bg-blue-100 text-blue-700';
+          case 'DEFENSE_SENT': return 'bg-amber-100 text-amber-700';
+          case 'ACCEPTED': return 'bg-emerald-100 text-emerald-700';
+          case 'REJECTED': return 'bg-violet-100 text-violet-700';
+          default: return 'bg-slate-100 text-slate-600';
+      }
+  };
+
+  const getStatusLabel = (status: string) => {
+      switch (status) {
+          case 'OPEN': return 'ABERTO';
+          case 'UNDER_REVIEW': return 'EM ANÁLISE';
+          case 'DEFENSE_SENT': return 'DEFESA ENVIADA';
+          case 'ACCEPTED': return 'ACEITO';
+          case 'REJECTED': return 'RECUSADO';
+          default: return status;
+      }
+  };
+
+  if (isLoading && !alerts.length) return <div className="p-10 text-center">Carregando gestão de disputas...</div>;
 
   return (
     <div className="space-y-8 relative">
@@ -65,37 +113,39 @@ export const MedManagement: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Bloqueio Cautelar</p>
-                <h3 className="text-3xl font-bold text-slate-900">{formatCurrency(1700.00)}</h3>
+      {medSummary && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
+                <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Bloqueio Cautelar</p>
+                    <h3 className="text-3xl font-bold text-slate-900">{formatCurrency(medSummary.blockedAmount)}</h3>
+                </div>
+                <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center text-amber-500">
+                    <Lock className="w-6 h-6" />
+                </div>
             </div>
-            <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center text-amber-500">
-                <Lock className="w-6 h-6" />
+            
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
+                <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Alertas em Aberto</p>
+                    <h3 className="text-3xl font-bold text-slate-900">{medSummary.openCount}</h3>
+                </div>
+                <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+                    <AlertTriangle className="w-6 h-6" />
+                </div>
             </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Alertas em Aberto</p>
-                <h3 className="text-3xl font-bold text-slate-900">2</h3>
-            </div>
-            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
-                <AlertTriangle className="w-6 h-6" />
-            </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Taxa de Resolução</p>
-                <h3 className="text-3xl font-bold text-emerald-600">98.5%</h3>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500">
-                <Gavel className="w-6 h-6" />
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between">
+                <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Total de Disputas</p>
+                    <h3 className="text-3xl font-bold text-indigo-600">{medSummary.totalCount}</h3>
+                </div>
+                <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500">
+                    <Gavel className="w-6 h-6" />
+                </div>
             </div>
         </div>
-      </div>
+      )}
 
       {/* Alerts Table */}
       <div className="bg-white border border-slate-100 rounded-[2rem] shadow-sm overflow-hidden">
@@ -115,7 +165,8 @@ export const MedManagement: React.FC = () => {
               <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider font-bold">
                       <tr>
-                          <th className="px-6 py-4">ID / Transação</th>
+                          <th className="px-6 py-4">Código MED</th>
+                          <th className="px-6 py-4">Transaction ID</th>
                           <th className="px-6 py-4">Motivo</th>
                           <th className="px-6 py-4">Banco Solicitante</th>
                           <th className="px-6 py-4">Valor Bloqueado</th>
@@ -125,15 +176,17 @@ export const MedManagement: React.FC = () => {
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                      {alerts.map((alert) => (
+                      {Array.isArray(alerts) && alerts.length > 0 ? alerts.map((alert) => (
                           <tr key={alert.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4">
-                                  <div className="font-bold text-slate-900">{alert.id}</div>
-                                  <div className="text-xs text-slate-400 font-mono">{alert.transactionId}</div>
+                              <td className="px-6 py-4 font-bold text-slate-900">
+                                  {alert.id}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-500 font-mono">
+                                  {alert.transactionId}
                               </td>
                               <td className="px-6 py-4">
                                   <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase">
-                                      {alert.reason === 'SCAM' ? 'Golpe' : alert.reason === 'HACK' ? 'Invasão' : 'Fraude'}
+                                      {alert.reason}
                                   </span>
                               </td>
                               <td className="px-6 py-4 text-slate-600 font-medium">
@@ -143,39 +196,54 @@ export const MedManagement: React.FC = () => {
                                   {formatCurrency(alert.amount)}
                               </td>
                               <td className="px-6 py-4">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
-                                      alert.status === 'OPEN' ? 'bg-rose-100 text-rose-700' : 
-                                      alert.status === 'ANALYSIS' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                  }`}>
-                                      {alert.status === 'OPEN' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>}
-                                      {alert.status === 'OPEN' ? 'Aberto' : alert.status === 'ANALYSIS' ? 'Em Análise' : 'Concluído'}
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${getStatusBadge(alert.status)}`}>
+                                      {getStatusLabel(alert.status)}
                                   </span>
                               </td>
                               <td className="px-6 py-4">
                                   <div className="text-xs font-bold text-rose-600">
                                       {new Date(alert.deadline).toLocaleDateString('pt-BR')}
                                   </div>
-                                  <div className="text-[10px] text-slate-400">
-                                      {Math.ceil((new Date(alert.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} dias restantes
-                                  </div>
                               </td>
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-4 text-right relative">
                                   <div className="flex justify-end gap-2">
                                       <button 
-                                        onClick={() => handleOpenDefense(alert)}
-                                        disabled={alert.status !== 'OPEN'}
-                                        className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-                                        title="Apresentar Defesa"
+                                        onClick={() => handleOpenDefense(alert.id)}
+                                        className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors" 
+                                        title="Ver Detalhes / Defesa"
                                       >
                                           <Gavel className="w-4 h-4" />
                                       </button>
-                                      <button className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors" title="Aceitar Devolução">
-                                          <CheckCircle className="w-4 h-4" />
+                                      <button 
+                                        onClick={() => setActionMenuId(actionMenuId === alert.id ? null : alert.id)}
+                                        className="p-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                                      >
+                                          <MoreHorizontal className="w-4 h-4" />
                                       </button>
                                   </div>
+                                  
+                                  {actionMenuId === alert.id && (
+                                      <div className="absolute right-6 top-12 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 flex flex-col gap-1">
+                                          <button onClick={() => handleAction(alert.id, 'ACCEPT_REFUND')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg w-full text-left">
+                                              <CheckCircle className="w-3 h-3" /> Aceitar Devolução
+                                          </button>
+                                          <button onClick={() => handleAction(alert.id, 'REJECT_REFUND')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg w-full text-left">
+                                              <X className="w-3 h-3" /> Recusar Devolução
+                                          </button>
+                                          <button onClick={() => handleAction(alert.id, 'MARK_UNDER_REVIEW')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg w-full text-left">
+                                              <ShieldAlert className="w-3 h-3" /> Marcar em Análise
+                                          </button>
+                                      </div>
+                                  )}
                               </td>
                           </tr>
-                      ))}
+                      )) : (
+                        <tr>
+                            <td colSpan={8} className="p-12 text-center text-slate-400 font-medium">
+                                Nenhuma solicitação em aberto encontrada.
+                            </td>
+                        </tr>
+                      )}
                   </tbody>
               </table>
           </div>
@@ -190,10 +258,10 @@ export const MedManagement: React.FC = () => {
                       <div>
                           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                               <Gavel className="w-5 h-5 text-indigo-600" />
-                              Apresentar Defesa
+                              Detalhes da Disputa
                           </h3>
                           <p className="text-sm text-slate-500">
-                              Disputa ID: <span className="font-mono font-bold text-slate-700">{selectedAlert.id}</span>
+                              Código: <span className="font-mono font-bold text-slate-700">{selectedAlert.id}</span>
                           </p>
                       </div>
                       <button onClick={() => setSelectedAlert(null)} className="p-2 text-slate-400 hover:text-slate-900 bg-white rounded-full border border-slate-200 transition-colors">
@@ -208,8 +276,7 @@ export const MedManagement: React.FC = () => {
                           <div>
                               <p className="text-sm font-bold text-amber-800">Atenção ao Prazo</p>
                               <p className="text-sm text-amber-700 mt-1">
-                                  Você tem até <span className="font-bold">{new Date(selectedAlert.deadline).toLocaleDateString('pt-BR')}</span> para enviar documentos comprobatórios.
-                                  A falta de defesa resultará no aceite automático da devolução.
+                                  Prazo limite: <span className="font-bold">{new Date(selectedAlert.deadline).toLocaleDateString('pt-BR')}</span>.
                               </p>
                           </div>
                       </div>
@@ -220,10 +287,10 @@ export const MedManagement: React.FC = () => {
                               <p className="text-xl font-bold text-slate-900">{formatCurrency(selectedAlert.amount)}</p>
                           </div>
                           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1">Motivo Alegado</span>
-                              <p className="text-xl font-bold text-slate-900">
-                                  {selectedAlert.reason === 'SCAM' ? 'Golpe / Engenharia Social' : 'Invasão de Conta'}
-                              </p>
+                              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1">Status Atual</span>
+                              <span className={`inline-flex mt-1 items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusBadge(selectedAlert.status)}`}>
+                                  {getStatusLabel(selectedAlert.status)}
+                              </span>
                           </div>
                       </div>
 
@@ -235,7 +302,7 @@ export const MedManagement: React.FC = () => {
                                   value={defenseText}
                                   onChange={(e) => setDefenseText(e.target.value)}
                                   className="w-full h-32 p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none text-slate-700"
-                                  placeholder="Descreva detalhadamente porque esta transação é legítima (ex: cliente autenticado, produto entregue, histórico positivo)..."
+                                  placeholder="Descreva detalhadamente a defesa..."
                               />
                           </div>
 
@@ -247,9 +314,6 @@ export const MedManagement: React.FC = () => {
                                   </div>
                                   <p className="text-sm font-bold text-slate-700">Clique para fazer upload</p>
                                   <p className="text-xs text-slate-400 mt-1">PDF, JPG ou PNG (Max 5MB)</p>
-                                  <p className="text-[10px] text-slate-400 mt-4 bg-slate-100 px-3 py-1 rounded-full">
-                                      Notas fiscais, logs de acesso, conversas, comprovantes de entrega
-                                  </p>
                               </div>
                           </div>
                       </form>
@@ -262,7 +326,7 @@ export const MedManagement: React.FC = () => {
                           onClick={() => setSelectedAlert(null)}
                           className="px-6 py-3 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-white transition-colors"
                       >
-                          Cancelar
+                          Fechar
                       </button>
                       <button 
                           type="submit"

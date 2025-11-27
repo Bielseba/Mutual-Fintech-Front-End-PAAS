@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, CartesianGrid, YAxis } from 'recharts';
-import { Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Wallet, Activity, ArrowRight, TrendingUp, DollarSign, Calendar, MoreHorizontal, CreditCard, Lock, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Wallet, Activity, ArrowRight, TrendingUp, DollarSign, Calendar, MoreHorizontal, CreditCard, Lock, ShieldAlert, Percent } from 'lucide-react';
 import { authService } from '../services/authService';
-import { ViewState, Transaction } from '../types';
+import { adminService } from '../services/adminService';
+import { ViewState, Transaction, MedSummary, UserFees } from '../types';
 
 const data = [
   { name: 'Seg', sales: 1200 }, { name: 'Ter', sales: 2100 }, { name: 'Qua', sales: 800 },
@@ -29,21 +30,49 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [showBalance, setShowBalance] = useState(true);
   const [balance, setBalance] = useState<number>(0);
-  const [blockedBalance, setBlockedBalance] = useState<number>(1250.00); // Mocked for UI, ideally comes from API
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const [totalVolume, setTotalVolume] = useState<number>(0);
+  const [totalIncome, setTotalIncome] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [medSummary, setMedSummary] = useState<MedSummary | null>(null);
+  const [myFees, setMyFees] = useState<UserFees | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
         try {
             const user = authService.getUser();
             if (user && user.id) {
-                const [bal, ledger] = await Promise.all([
+                const [bal, ledger, medData, feesData] = await Promise.all([
                     authService.getWalletBalance(user.id),
-                    authService.getWalletLedger(user.id)
+                    authService.getWalletLedger(),
+                    adminService.getMedSummary().catch(() => null),
+                    authService.getMyFees().catch(() => null)
                 ]);
                 setBalance(bal);
                 setRecentTransactions(ledger.slice(0, 5));
+                if (medData) setMedSummary(medData);
+                if (feesData) setMyFees(feesData);
+
+                // Calculate Totals from Ledger
+                let income = 0;
+                let volume = 0;
+
+                ledger.forEach(tx => {
+                    const amt = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+                    const val = Math.abs(amt);
+                    
+                    // Total Volume (Absolute sum of everything)
+                    volume += val;
+
+                    // Total Income (Credits/Deposits)
+                    const isCredit = tx.type === 'CREDIT' || tx.type === 'PIX_IN' || amt > 0;
+                    if (isCredit) {
+                        income += val;
+                    }
+                });
+
+                setTotalIncome(income);
+                setTotalVolume(volume);
             }
         } catch (error) { console.error("Failed to load dashboard data", error); } 
         finally { setIsLoading(false); }
@@ -90,13 +119,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                         </div>
                         <span className="text-amber-400 font-mono font-bold text-sm flex items-center gap-1">
                             <Lock className="w-3 h-3" />
-                            {showBalance ? formatCurrency(blockedBalance) : '••••'}
+                            {showBalance && medSummary ? formatCurrency(medSummary.blockedAmount) : showBalance ? formatCurrency(0) : '••••'}
                         </span>
                     </div>
                 </div>
 
                 <div className="relative z-10 grid grid-cols-2 gap-4">
-                    <button onClick={() => onNavigate('pix')} className="bg-white text-slate-950 text-sm font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]">
+                    <button onClick={() => onNavigate('pix')} className="bg-white text-slate-900 text-sm font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]">
                         <ArrowDownLeft className="w-4 h-4" /> Depositar
                     </button>
                     <button onClick={() => onNavigate('withdraw')} className="bg-white/10 text-white text-sm font-bold py-4 rounded-xl hover:bg-white/20 transition-colors flex items-center justify-center gap-2 backdrop-blur-sm border border-white/5 active:scale-[0.98]">
@@ -108,11 +137,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
         {/* Charts & Metrics */}
         <div className="lg:col-span-7 flex flex-col gap-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* MED Summary Card - Conditionally Rendered */}
+            {medSummary?.hasMed && (
+                <div className="rounded-[2rem] bg-white shadow-sm border border-slate-100 p-6 flex flex-col gap-3 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                    <div className="flex items-center justify-between relative z-10">
+                        <span className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                            <ShieldAlert className="w-4 h-4 text-amber-500" />
+                            Gestão MED
+                        </span>
+                        <span className="text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-700 font-bold">
+                            {medSummary.openCount} alerta(s)
+                        </span>
+                    </div>
+                    <div className="text-3xl font-bold text-slate-900 relative z-10">
+                        {formatCurrency(medSummary.blockedAmount)}
+                    </div>
+                    <div className="text-xs text-slate-500 font-medium relative z-10">
+                        Valor bloqueado em disputas
+                    </div>
+                    <button
+                        className="mt-2 w-full rounded-xl bg-indigo-600 text-white text-sm py-3 font-bold hover:bg-indigo-700 transition relative z-10"
+                        onClick={() => onNavigate('med')}
+                    >
+                        Ver Gestão de Disputas
+                    </button>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Entradas</p>
-                        <h3 className="text-2xl font-bold text-slate-900">R$ 12.450,00</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">
+                            {isLoading ? '...' : formatCurrency(totalIncome)}
+                        </h3>
                     </div>
                     <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-600">
                         <TrendingUp className="w-6 h-6" />
@@ -121,12 +181,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between">
                      <div>
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Volume Total</p>
-                        <h3 className="text-2xl font-bold text-slate-900">R$ 16.650,00</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">
+                            {isLoading ? '...' : formatCurrency(totalVolume)}
+                        </h3>
                     </div>
                     <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
                         <Activity className="w-6 h-6" />
                     </div>
                 </div>
+
+                {/* FEES CARD - NEW */}
+                {myFees && (
+                    <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Percent className="w-4 h-4 text-slate-400" />
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Tarifas</p>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-slate-600">Pix IN</span>
+                                <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                                    {myFees.pixInPercent.toFixed(2)}%
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-slate-600">Pix OUT</span>
+                                <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                                    {myFees.pixOutPercent.toFixed(2)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex-1 min-h-[250px] relative overflow-hidden">

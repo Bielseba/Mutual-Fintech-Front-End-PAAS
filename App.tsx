@@ -5,7 +5,6 @@ import { Dashboard } from './components/Dashboard';
 import { TransactionHistory } from './components/TransactionHistory';
 import { IntegrationDocs } from './components/IntegrationDocs';
 import { ApiSettings } from './components/ApiSettings';
-import { ChatBot } from './components/ChatBot';
 import { PixTransfer } from './components/PixTransfer';
 import { MedManagement } from './components/MedManagement';
 import { FeesPage } from './components/FeesPage';
@@ -93,7 +92,7 @@ const App: React.FC = () => {
     // 1. Initial Fetch to set baseline (don't notify on past transactions)
     const fetchInitial = async () => {
         try {
-            const ledger = await authService.getWalletLedger(currentUser.id);
+            const ledger = await authService.getWalletLedger();
             if (ledger.length > 0) setLastTxId(ledger[0].id);
         } catch (e) {}
     };
@@ -102,7 +101,7 @@ const App: React.FC = () => {
     // 2. Polling Interval (every 30s)
     const interval = setInterval(async () => {
         try {
-            const ledger = await authService.getWalletLedger(currentUser.id);
+            const ledger = await authService.getWalletLedger();
             if (ledger.length > 0) {
                 const newest = ledger[0];
                 // If we have a previous ID and the new one is different, it means a new tx came in
@@ -526,7 +525,6 @@ const App: React.FC = () => {
         </nav>
       </div>
 
-      <ChatBot />
     </div>
   );
 };
