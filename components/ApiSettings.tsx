@@ -11,7 +11,7 @@ type Credentials = {
 
 export const ApiSettings: React.FC = () => {
   const [showSecret, setShowSecret] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('https://api.mutualpay.com/webhooks/pix');
+  const [webhookUrl, setWebhookUrl] = useState('https://seu-sistema.com.br/webhooks/pix');
   
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,6 +172,10 @@ export const ApiSettings: React.FC = () => {
               </div>
             ) : (
               <>
+                <CredentialField
+                  label="Endpoint da API (Base URL)"
+                  value="https://api.ominigateway.com.br/"
+                />
                 <CredentialField
                   label="App ID (Client ID)"
                   value={getAppId(credentials)}

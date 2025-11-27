@@ -37,7 +37,7 @@ export const IntegrationDocs: React.FC = () => {
 
 const createPix = async () => {
   try {
-    const response = await axios.post('https://api.mutualgateway.com/v1/pix', {
+    const response = await axios.post('https://api.ominigateway.com.br/v1/pix', {
       amount: 100.50,
       customer: {
         name: "João Silva",
@@ -59,7 +59,7 @@ const createPix = async () => {
 createPix();`,
     python: `import requests
 
-url = "https://api.mutualgateway.com/v1/pix"
+url = "https://api.ominigateway.com.br/v1/pix"
 
 payload = {
     "amount": 100.50,
@@ -77,7 +77,7 @@ response = requests.post(url, json=payload, headers=headers)
 
 print(response.json())`,
     curl: `curl --request POST \\
-  --url https://api.mutualgateway.com/v1/pix \\
+  --url https://api.ominigateway.com.br/v1/pix \\
   --header 'Authorization: Bearer YOUR_ACCESS_TOKEN' \\
   --header 'Content-Type: application/json' \\
   --data '{
