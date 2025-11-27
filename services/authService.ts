@@ -452,52 +452,18 @@ export const authService = {
     expiresAt: string;
   }> {
     const token = this.getToken();
-    const user = this.getUser();
-
     if (!token) throw new Error("Sessão expirada. Faça login novamente.");
-    if (!user) throw new Error("Usuário não autenticado. Faça login novamente.");
-
-    const rawUserId: any =
-      (user as any).id ??
-      (user as any).userId ??
-      (user as any).user_id ??
-      (user as any)._id;
-
-    if (!rawUserId) {
-      console.error("User object missing ID:", user);
-      throw new Error("ID do usuário não encontrado na sessão. Tente relogar.");
-    }
-
-    const numericId = parseInt(String(rawUserId), 10);
-    if (!Number.isFinite(numericId) || numericId <= 0) {
-      console.error("User ID inválido para operação financeira:", rawUserId);
-      throw new Error("ID do usuário inválido para operação financeira.");
-    }
-
-    const userIdToSend: number = numericId;
-
-    const rawCPF = (user.document || (user as any).cpf || (user as any).cnpj || "").replace(/\D/g, "");
-    const payerCPF = rawCPF.length >= 11 ? rawCPF : "00000000000";
-    const payerName = user.name || "Cliente Mutual";
 
     const payload = {
-      userId: userIdToSend,
-      user_id: userIdToSend,
-      operatorId: 1, // Fix: Add operatorId to satisfy backend requirements
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX",
-      extra: {
-        userId: userIdToSend,
-        payerName: payerName,
-        payerCPF: payerCPF,
-      }
     };
 
     console.log("[AuthService] Payload Pix:", JSON.stringify(payload));
 
     const endpoints = [
-      `https://mutual-fintech-user-service.vercel.app/api/wallet/deposit/pix`,
+      `${API_URL}/wallet/deposit/pix`,
     ];
 
     let lastError: any;
