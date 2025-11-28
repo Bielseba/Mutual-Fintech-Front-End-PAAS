@@ -4,13 +4,28 @@ import { MedSummary, MedAlert } from '../types';
 const API_URL = "https://mutual-fintech-user-service.vercel.app/api";
 
 const getToken = () => localStorage.getItem("mutual_token");
-const getAppId = () => localStorage.getItem("app_id");
-const getAppSecret = () => localStorage.getItem("app_secret");
+
+const getCredentials = () => {
+    let appId = localStorage.getItem("app_id");
+    let appSecret = localStorage.getItem("app_secret");
+
+    // Fallback if missing in direct keys but present in user object
+    if (!appId || !appSecret) {
+        const userStr = localStorage.getItem("mutual_user");
+        if (userStr) {
+             try {
+                const u = JSON.parse(userStr);
+                appId = appId || u.appId || u.app_id;
+                appSecret = appSecret || u.clientSecret || u.app_secret_hash || u.client_secret;
+             } catch(e) {}
+        }
+    }
+    return { appId, appSecret };
+};
 
 const fetchAdmin = async (endpoint: string, options: RequestInit = {}) => {
   const token = getToken();
-  const appId = getAppId();
-  const appSecret = getAppSecret();
+  const { appId, appSecret } = getCredentials();
 
   if (!token) throw new Error("Sessão expirada.");
 
@@ -20,15 +35,14 @@ const fetchAdmin = async (endpoint: string, options: RequestInit = {}) => {
       ...options.headers,
   };
 
-  if (appId) headers["app_id"] = appId;
-  if (appSecret) headers["app_secret"] = appSecret;
+  if (appId && appId !== "undefined") headers["app_id"] = String(appId);
+  if (appSecret && appSecret !== "undefined") headers["app_secret"] = String(appSecret);
 
   const res = await fetch(`${API_URL}/admin/med${endpoint}`, {
     ...options,
     headers: headers,
   });
 
-  // Handle 404 gracefully (Feature not deployed yet)
   if (res.status === 404) {
     return null;
   }
@@ -51,7 +65,6 @@ export const adminService = {
     try {
         const res = await fetchAdmin('/summary');
         if (!res) {
-            // Fallback mock if endpoint is 404
             return { openCount: 0, blockedAmount: 0, totalCount: 0, hasMed: false };
         }
         return res.data || res;
@@ -70,7 +83,6 @@ export const adminService = {
         const res = await fetchAdmin(`?${params.toString()}`);
         if (!res) return [];
 
-        // Unwrap array from various possible response structures
         if (Array.isArray(res)) return res;
         if (res.data && Array.isArray(res.data)) return res.data;
         if (res.list && Array.isArray(res.list)) return res.list;

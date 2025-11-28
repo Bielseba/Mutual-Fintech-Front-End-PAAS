@@ -9,7 +9,7 @@ import {
   UserFees,
 } from "../types";
 
-// BACK DO USER-SERVICE PUBLICA TUDO DEBAIXO DE /api
+// API URL Funcional (Backend Real)
 const API_URL = "https://mutual-fintech-user-service.vercel.app/api";
 
 async function fetchWithRetry(
@@ -40,9 +40,6 @@ async function requestWithRouteDiscovery(
   const candidates = [
     `${API_URL}/auth/${basePath}`, // /api/auth/login
     `${API_URL}/${basePath}`, // /api/login
-    `https://mutual-fintech-user-service.vercel.app/auth/${basePath}`,
-    `https://mutual-fintech-user-service.vercel.app/${basePath}`,
-    `https://mutual-fintech-user-service.vercel.app/login`, // Fallback extreme
   ];
 
   let lastError: any;
@@ -62,36 +59,81 @@ async function requestWithRouteDiscovery(
 }
 
 export const authService = {
-  // --- FUNÇÃO UTILITÁRIA REQUISITADA ---
-  getGatewayHeaders() {
-    const token = localStorage.getItem("mutual_token");
+  // Helper internal para buscar credenciais salvas
+  _getStoredCredentials() {
     let appId = localStorage.getItem("app_id");
     let appSecret = localStorage.getItem("app_secret");
 
-    // Fallback: se não achar nas chaves diretas, tenta extrair do objeto de usuário salvo (sessão antiga)
     if (!appId || !appSecret) {
         const userStr = localStorage.getItem("mutual_user");
         if (userStr) {
             try {
                 const u = JSON.parse(userStr);
-                if (!appId) appId = u.appId || u.app_id;
-                if (!appSecret) appSecret = u.clientSecret || u.app_secret_hash || u.client_secret;
+                appId = appId || u.appId || u.app_id;
+                appSecret = appSecret || u.clientSecret || u.app_secret_hash || u.client_secret;
                 
-                // Salva para a próxima vez ser mais rápido
-                if (appId) localStorage.setItem("app_id", appId);
-                if (appSecret) localStorage.setItem("app_secret", appSecret);
+                // Persist found credentials
+                if (appId) localStorage.setItem("app_id", String(appId));
+                if (appSecret) localStorage.setItem("app_secret", String(appSecret));
             } catch(e) {}
         }
     }
+    return { appId, appSecret };
+  },
 
+  // Headers básicos para leitura (GET)
+  getBasicHeaders() {
+    const token = localStorage.getItem("mutual_token");
     if (!token) throw new Error("Usuário não autenticado.");
-
-    return {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "app_id": appId || "",
-      "app_secret": appSecret || ""
+    
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
     };
+
+    const { appId, appSecret } = this._getStoredCredentials();
+
+    if (appId && appId !== "undefined" && appId !== "null") headers["app_id"] = String(appId);
+    if (appSecret && appSecret !== "undefined" && appSecret !== "null") headers["app_secret"] = String(appSecret);
+
+    return headers;
+  },
+
+  // Headers completos para o Gateway (POST Pix)
+  getGatewayHeaders() {
+    return this.getBasicHeaders(); // Reuses the same logic as basic now includes app_id
+  },
+
+  // --- NEW: System Status Check ---
+  async getSystemStatus(): Promise<{ maintenance: boolean; message?: string }> {
+      try {
+          // Check public maintenance endpoint
+          const response = await fetch(`${API_URL}/public/maintenance`, {
+             method: 'GET',
+             headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (response.ok) {
+              const json = await response.json();
+              // Structure: { ok: true, data: { isActive: true, message: "..." } }
+              if (json.data && json.data.isActive) {
+                  return { 
+                      maintenance: true, 
+                      message: json.data.message || "O sistema está em manutenção programada." 
+                  };
+              }
+          } else if (response.status === 503) {
+              // Fallback for standard 503
+              return { maintenance: true, message: "Serviço temporariamente indisponível." };
+          }
+          
+          return { maintenance: false };
+      } catch (error) {
+          console.error("Error checking maintenance status:", error);
+          // In case of network error, usually we allow the app to try loading, 
+          // unless it's a persistent connection issue which will be caught by other calls.
+          return { maintenance: false };
+      }
   },
 
   async login(credentials: LoginDTO): Promise<AuthResponse> {
@@ -106,6 +148,11 @@ export const authService = {
     };
 
     const response = await requestWithRouteDiscovery("login", options);
+    
+    // Check for maintenance on login
+    if (response.status === 503) {
+        throw new Error("MAINTENANCE_MODE");
+    }
 
     const contentType = response.headers.get("content-type");
     let data: any;
@@ -139,9 +186,7 @@ export const authService = {
     const rawUser = data.user;
     let normalizedUser: User = normalizeUser(rawUser);
 
-    // Salvar credenciais retornadas pelo Login conforme solicitado
     const token = data.token || data.access_token || data.accessToken || "";
-    // Prioriza dados da raiz da resposta, depois do objeto user
     const appId = data.appId || data.app_id || rawUser.appId || rawUser.app_id;
     const clientSecret = data.clientSecret || data.client_secret || rawUser.clientSecret || rawUser.client_secret;
 
@@ -149,7 +194,6 @@ export const authService = {
     if (appId) localStorage.setItem("app_id", String(appId));
     if (clientSecret) localStorage.setItem("app_secret", String(clientSecret));
 
-    // Persistência do User
     localStorage.setItem("mutual_user", JSON.stringify(normalizedUser));
 
     return {
@@ -192,6 +236,9 @@ export const authService = {
     };
 
     const response = await requestWithRouteDiscovery("register", options);
+    
+    if (response.status === 503) throw new Error("MAINTENANCE_MODE");
+
     let responseData = await response.json();
 
     if (!response.ok) {
@@ -205,11 +252,9 @@ export const authService = {
     const token = this.getToken();
     if (!token) throw new Error("Sessão expirada.");
 
-    // Se já temos no localStorage, retornamos direto para evitar request extra
-    const storedAppId = localStorage.getItem("app_id");
-    const storedSecret = localStorage.getItem("app_secret");
-    if (storedAppId && storedSecret) {
-        return { appId: storedAppId, clientSecret: storedSecret };
+    const { appId, appSecret } = this._getStoredCredentials();
+    if (appId && appSecret) {
+        return { appId, clientSecret: appSecret };
     }
 
     const url = `${API_URL}/users/${userId}/credentials`;
@@ -230,17 +275,15 @@ export const authService = {
   },
 
   async rotateCredentials(userId: string | number): Promise<any> {
-     // Implementação simplificada mantendo contrato
      return this.getCredentials(userId); 
   },
 
   async getWalletBalance(userId: string | number): Promise<number> {
      try {
-         // Agora usa os headers corretos com app_id
-         const headers = this.getGatewayHeaders();
+         const headers = this.getBasicHeaders();
          const response = await fetch(`${API_URL}/users/${userId}/wallet`, {
              method: "GET",
-             headers: headers
+             headers: headers as any
          });
          if (!response.ok) throw new Error("Falha ao buscar saldo");
          const json = await response.json();
@@ -253,32 +296,53 @@ export const authService = {
 
   async getWalletLedger(): Promise<Transaction[]> {
     try {
-        // Agora usa os headers corretos com app_id
-        const headers = this.getGatewayHeaders();
-        const response = await fetch(`${API_URL}/me/wallet/ledger`, {
+        const user = this.getUser();
+        if (!user?.id) return [];
+
+        const headers = this.getBasicHeaders();
+        // Use user-specific endpoint to align with balance request
+        const response = await fetch(`${API_URL}/users/${user.id}/wallet/ledger`, {
             method: "GET",
-            headers: headers
+            headers: headers as any
         });
-        if (!response.ok) throw new Error("Falha ao buscar extrato");
+        
+        if (!response.ok) {
+            // Fallback to /me if /users/id fails, though usually /users/id is safer if we have ID
+            const fallbackResponse = await fetch(`${API_URL}/me/wallet/ledger`, {
+                method: "GET",
+                headers: headers as any
+            });
+            if (fallbackResponse.ok) {
+                const json = await fallbackResponse.json();
+                const list = json.ledger || json.data || [];
+                return this._mapLedger(list);
+            }
+            throw new Error("Falha ao buscar extrato");
+        }
         
         const json = await response.json();
         const list = json.ledger || json.data || [];
-        
-        return list.map((tx: any) => ({
-            id: tx.id || tx._id || 'TX-UNK',
-            amount: Number(tx.amount || tx.value || 0),
-            date: tx.created_at || new Date().toISOString(),
-            description: tx.description || 'Transação',
-            type: (tx.amount > 0 || tx.type === 'CREDIT') ? 'CREDIT' : 'DEBIT',
-            status: tx.status || 'COMPLETED'
-        }));
+        return this._mapLedger(list);
     } catch (e) {
         console.error("Erro getWalletLedger:", e);
         return [];
     }
   },
 
-  // --- FUNÇÃO AJUSTADA PARA PIX IN (DEPÓSITO) ---
+  _mapLedger(list: any[]): Transaction[] {
+      return list.map((tx: any) => ({
+        id: tx.id || tx._id || 'TX-UNK',
+        amount: Number(tx.amount || tx.value || 0),
+        date: tx.created_at || new Date().toISOString(),
+        description: tx.description || 'Transação',
+        type: (tx.amount > 0 || tx.type === 'CREDIT') ? 'CREDIT' : 'DEBIT',
+        status: tx.status || 'COMPLETED',
+        sender: tx.sender,
+        recipient: tx.recipient
+    }));
+  },
+
+  // PIX IN (Depósito)
   async createPixCharge(amount: number): Promise<{
     qrCode: string;
     qrCodeImage: string;
@@ -286,35 +350,34 @@ export const authService = {
     expiresAt: string;
   }> {
     const url = `${API_URL}/wallet/deposit/pix`;
-
-    // 1. Monta os headers usando a função utilitária que pega do localStorage
     const headers = this.getGatewayHeaders();
+    
+    if (!headers['app_id']) {
+        throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
+    }
 
-    // 2. Payload limpo conforme requisitado
     const payload = {
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX"
     };
 
-    console.log("[AuthService] Criando Pix In:", url, payload);
-
     const response = await fetch(url, {
       method: "POST",
       mode: "cors",
-      headers: headers, // Headers injetados corretamente
+      referrerPolicy: "no-referrer",
+      headers: headers as any,
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
         const errText = await response.text();
         console.error("Erro API Pix:", errText);
-        throw new Error("Falha ao gerar Pix: " + errText);
+        throw new Error("Falha ao gerar Pix: " + (errText || response.statusText));
     }
 
     const json = await response.json();
     
-    // Extração robusta dos dados do Pix
     const qrCode = json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
     const qrCodeImage = json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
     const orderId = json.orderNo || json.id || json.data?.orderNo || "N/A";
@@ -342,7 +405,7 @@ export const authService = {
       
       const response = await fetch(`${API_URL}/wallet/withdraw/pix`, {
           method: "POST",
-          headers: headers,
+          headers: headers as any,
           body: JSON.stringify(payload)
       });
       
@@ -367,8 +430,8 @@ export const authService = {
 
   async getMyFees(): Promise<UserFees | null> {
       try {
-          const headers = this.getGatewayHeaders();
-          const res = await fetch(`${API_URL}/me/fees`, { headers });
+          const headers = this.getBasicHeaders();
+          const res = await fetch(`${API_URL}/me/fees`, { headers: headers as any });
           const json = await res.json();
           return json.data ? { 
               userId: json.data.userId, 

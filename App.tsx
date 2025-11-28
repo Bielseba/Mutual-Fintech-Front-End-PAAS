@@ -8,6 +8,7 @@ import { ApiSettings } from './components/ApiSettings';
 import { PixTransfer } from './components/PixTransfer';
 import { MedManagement } from './components/MedManagement';
 import { FeesPage } from './components/FeesPage';
+import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { ViewState, User as UserType } from './types';
 import { authService } from './services/authService';
 
@@ -49,6 +50,10 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   
+  // Maintenance Mode State
+  const [isMaintenance, setIsMaintenance] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>('');
+  
   // Notification State
   const [notifications, setNotifications] = useState<{id: number, text: string, time: string, read: boolean}[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -60,9 +65,29 @@ const App: React.FC = () => {
     name: '', email: '', password: '', document: '', cnpj: '', companyName: '', tradeName: '', partnerName: ''
   });
 
+  const checkMaintenance = async () => {
+     const status = await authService.getSystemStatus();
+     if (status.maintenance) {
+         setIsMaintenance(true);
+         if (status.message) setMaintenanceMessage(status.message);
+         return true;
+     }
+     setIsMaintenance(false);
+     setMaintenanceMessage('');
+     return false;
+  };
+
   useEffect(() => {
     const initSystem = async () => {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate boot
+        
+        // Check maintenance first
+        const maintenanceActive = await checkMaintenance();
+        if (maintenanceActive) {
+            setIsAppLoading(false);
+            return;
+        }
+
         const token = authService.getToken();
         const savedUser = authService.getUser();
         
@@ -87,7 +112,7 @@ const App: React.FC = () => {
 
   // REAL Transaction Polling for Notifications
   useEffect(() => {
-    if (!isLoggedIn || !currentUser?.id) return;
+    if (!isLoggedIn || !currentUser?.id || isMaintenance) return;
 
     // 1. Initial Fetch to set baseline (don't notify on past transactions)
     const fetchInitial = async () => {
@@ -135,7 +160,7 @@ const App: React.FC = () => {
         clearInterval(interval);
         document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isLoggedIn, currentUser?.id, lastTxId]);
+  }, [isLoggedIn, currentUser?.id, lastTxId, isMaintenance]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -176,6 +201,10 @@ const App: React.FC = () => {
         setRegistrationSuccess(true);
       }
     } catch (err: any) {
+      if (err.message === "MAINTENANCE_MODE") {
+          setIsMaintenance(true);
+          return;
+      }
       const msg = err.message || 'Erro desconhecido.';
       if (msg.toLowerCase().includes('análise')) {
         setRegistrationSuccess(true);
@@ -195,6 +224,10 @@ const App: React.FC = () => {
   };
 
   if (isAppLoading) return <OminiLoader />;
+
+  if (isMaintenance) {
+      return <MaintenanceScreen onRetry={() => checkMaintenance()} message={maintenanceMessage} />;
+  }
 
   if (!isLoggedIn) {
     return (
