@@ -1,20 +1,31 @@
+
 import { MedSummary, MedAlert } from '../types';
 
 const API_URL = "https://mutual-fintech-user-service.vercel.app/api";
 
 const getToken = () => localStorage.getItem("mutual_token");
+const getAppId = () => localStorage.getItem("app_id");
+const getAppSecret = () => localStorage.getItem("app_secret");
 
 const fetchAdmin = async (endpoint: string, options: RequestInit = {}) => {
   const token = getToken();
+  const appId = getAppId();
+  const appSecret = getAppSecret();
+
   if (!token) throw new Error("Sessão expirada.");
+
+  const headers: any = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      ...options.headers,
+  };
+
+  if (appId) headers["app_id"] = appId;
+  if (appSecret) headers["app_secret"] = appSecret;
 
   const res = await fetch(`${API_URL}/admin/med${endpoint}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
+    headers: headers,
   });
 
   // Handle 404 gracefully (Feature not deployed yet)
