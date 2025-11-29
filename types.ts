@@ -115,7 +115,8 @@ export type ViewState =
   | 'withdraw'
   | 'payment-links'
   | 'med'
-  | 'fees';
+  | 'fees'
+  | 'crypto';
 
 
 export interface AuthResponse {

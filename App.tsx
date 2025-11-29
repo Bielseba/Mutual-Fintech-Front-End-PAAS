@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent } from 'lucide-react';
+import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent, Bitcoin } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { TransactionHistory } from './components/TransactionHistory';
 import { IntegrationDocs } from './components/IntegrationDocs';
@@ -9,6 +9,7 @@ import { PixTransfer } from './components/PixTransfer';
 import { MedManagement } from './components/MedManagement';
 import { FeesPage } from './components/FeesPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
+import { CryptoOTC } from './components/CryptoOTC';
 import { ViewState, User as UserType } from './types';
 import { authService } from './services/authService';
 
@@ -366,6 +367,7 @@ const App: React.FC = () => {
                 <div className="my-4 h-px bg-white/5 mx-4"></div>
                 <NavButton active={view === 'pix'} onClick={() => setView('pix')} icon={QrCode} label="Depositar (Pix In)" />
                 <NavButton active={view === 'withdraw'} onClick={() => setView('withdraw')} icon={Landmark} label="Sacar (Pix Out)" />
+                <NavButton active={view === 'crypto'} onClick={() => setView('crypto')} icon={Bitcoin} label="Cripto OTC" />
                 <NavButton active={view === 'med'} onClick={() => setView('med')} icon={ShieldAlert} label="Gestão MED" />
                 <NavButton active={view === 'fees'} onClick={() => setView('fees')} icon={Percent} label="Tarifas" />
             </nav>
@@ -405,6 +407,7 @@ const App: React.FC = () => {
                     {view === 'transactions' && 'Extrato Financeiro'}
                     {view === 'pix' && 'Depósito Pix'}
                     {view === 'withdraw' && 'Saque Pix'}
+                    {view === 'crypto' && 'Criptoativos'}
                     {view === 'med' && 'Gestão de Disputas (MED)'}
                     {view === 'fees' && 'Tarifas e Taxas'}
                     {view === 'integration' && 'Documentação'}
@@ -540,6 +543,7 @@ const App: React.FC = () => {
               {view === 'fees' && <FeesPage />}
               {view === 'integration' && <IntegrationDocs />}
               {view === 'settings' && <ApiSettings />}
+              {view === 'crypto' && <CryptoOTC />}
               {(view === 'pix' || view === 'withdraw') && <PixTransfer mode={view} onBack={() => setView('dashboard')} />}
            </div>
         </main>
@@ -553,7 +557,7 @@ const App: React.FC = () => {
                      <QrCode className="w-6 h-6" />
                  </button>
             </div>
-            <MobileNavBtn active={view === 'withdraw'} onClick={() => setView('withdraw')} icon={ArrowRightLeft} label="Saque" />
+            <MobileNavBtn active={view === 'crypto'} onClick={() => setView('crypto')} icon={Bitcoin} label="Cripto" />
             <MobileNavBtn active={view === 'settings'} onClick={() => setView('settings')} icon={Settings} label="Ajustes" />
         </nav>
       </div>
