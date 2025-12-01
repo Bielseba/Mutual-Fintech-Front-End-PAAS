@@ -64,24 +64,62 @@ export const authService = {
     let appId = localStorage.getItem("app_id");
     let appSecret = localStorage.getItem("app_secret");
 
-    if (!appId || !appSecret) {
+    // Helper para validar se o valor é válido
+    const isValid = (val: string | null | undefined): boolean => {
+      return val !== null && val !== undefined && val !== "" && val !== "undefined" && val !== "null";
+    };
+
+    if (!isValid(appId) || !isValid(appSecret)) {
         const userStr = localStorage.getItem("mutual_user");
         if (userStr) {
             try {
                 const u = JSON.parse(userStr);
-                appId = appId || u.appId || u.app_id;
-                appSecret = appSecret || u.clientSecret || u.app_secret_hash || u.client_secret;
+                if (!isValid(appId)) {
+                  appId = u.appId || u.app_id || null;
+                }
+                if (!isValid(appSecret)) {
+                  appSecret = u.clientSecret || u.app_secret_hash || u.client_secret || null;
+                }
                 
-                // Persist found credentials
-                if (appId) localStorage.setItem("app_id", String(appId));
-                if (appSecret) localStorage.setItem("app_secret", String(appSecret));
+                // Persist found credentials apenas se forem válidos
+                if (isValid(appId)) localStorage.setItem("app_id", String(appId));
+                if (isValid(appSecret)) localStorage.setItem("app_secret", String(appSecret));
             } catch(e) {}
         }
     }
-    return { appId, appSecret };
+    return { 
+      appId: isValid(appId) ? appId : null, 
+      appSecret: isValid(appSecret) ? appSecret : null 
+    };
   },
 
-  // Headers básicos para leitura (GET)
+  // Garante que as credenciais estejam disponíveis, buscando da API se necessário
+  async ensureCredentials(): Promise<void> {
+    const { appId, appSecret } = this._getStoredCredentials();
+    
+    // Se já temos credenciais válidas, não precisa buscar
+    if (appId && appSecret) {
+      return;
+    }
+
+    // Busca credenciais da API
+    const user = this.getUser();
+    if (!user?.id) {
+      throw new Error("Usuário não identificado. Faça login novamente.");
+    }
+
+    try {
+      const credentials = await this.getCredentials(user.id);
+      if (!credentials || !credentials.appId || !credentials.clientSecret) {
+        console.warn("Credenciais não encontradas na API");
+      }
+    } catch (error) {
+      console.error("Erro ao buscar credenciais da API:", error);
+      // Não lança erro para não quebrar o fluxo, mas loga o problema
+    }
+  },
+
+  // Headers básicos para leitura (GET) - versão síncrona (usa credenciais do localStorage)
   getBasicHeaders() {
     const token = localStorage.getItem("mutual_token");
     if (!token) throw new Error("Usuário não autenticado.");
@@ -93,15 +131,29 @@ export const authService = {
 
     const { appId, appSecret } = this._getStoredCredentials();
 
-    if (appId && appId !== "undefined" && appId !== "null") headers["app_id"] = String(appId);
-    if (appSecret && appSecret !== "undefined" && appSecret !== "null") headers["app_secret"] = String(appSecret);
+    // Adiciona credenciais apenas se forem válidas
+    if (appId) headers["app_id"] = String(appId);
+    if (appSecret) headers["app_secret"] = String(appSecret);
 
     return headers;
   },
 
-  // Headers completos para o Gateway (POST Pix)
+  // Headers básicos com garantia de credenciais (versão assíncrona)
+  async getBasicHeadersWithCredentials(): Promise<Record<string, string>> {
+    // Garante que as credenciais estejam disponíveis
+    await this.ensureCredentials();
+    return this.getBasicHeaders();
+  },
+
+  // Headers completos para o Gateway (POST Pix) - versão síncrona
   getGatewayHeaders() {
     return this.getBasicHeaders(); // Reuses the same logic as basic now includes app_id
+  },
+
+  // Headers completos para o Gateway com garantia de credenciais (versão assíncrona)
+  async getGatewayHeadersWithCredentials(): Promise<Record<string, string>> {
+    await this.ensureCredentials();
+    return this.getBasicHeaders();
   },
 
   // --- NEW: System Status Check ---
@@ -258,17 +310,34 @@ export const authService = {
     }
 
     const url = `${API_URL}/users/${userId}/credentials`;
+    // Para buscar credenciais, não precisa enviar app_id e app_secret (apenas o token)
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    };
+    
     const response = await fetchWithRetry(url, {
       method: "GET",
-      headers: { "Authorization": `Bearer ${token}` }
+      headers: headers as any
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`Erro ao buscar credenciais: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
     const json = await response.json();
     if (json.data) {
+        const fetchedAppId = json.data.app_id || json.data.appId;
+        const fetchedSecret = json.data.client_secret || json.data.clientSecret;
+        
+        // Salva as credenciais obtidas
+        if (fetchedAppId) localStorage.setItem("app_id", String(fetchedAppId));
+        if (fetchedSecret) localStorage.setItem("app_secret", String(fetchedSecret));
+        
         return { 
-            appId: json.data.app_id || json.data.appId, 
-            clientSecret: json.data.client_secret || json.data.clientSecret 
+            appId: fetchedAppId, 
+            clientSecret: fetchedSecret 
         };
     }
     return null;
@@ -280,6 +349,8 @@ export const authService = {
 
   async getWalletBalance(userId: string | number): Promise<number> {
      try {
+         // Garante que as credenciais estejam disponíveis antes da requisição
+         await this.ensureCredentials();
          const headers = this.getBasicHeaders();
          const response = await fetch(`${API_URL}/users/${userId}/wallet`, {
              method: "GET",
@@ -299,6 +370,8 @@ export const authService = {
         const user = this.getUser();
         if (!user?.id) return [];
 
+        // Garante que as credenciais estejam disponíveis antes da requisição
+        await this.ensureCredentials();
         const headers = this.getBasicHeaders();
         // Use user-specific endpoint to align with balance request
         const response = await fetch(`${API_URL}/users/${user.id}/wallet/ledger`, {
@@ -349,6 +422,9 @@ export const authService = {
     orderId: string;
     expiresAt: string;
   }> {
+    // Garante que as credenciais estejam disponíveis antes da requisição
+    await this.ensureCredentials();
+    
     const url = `${API_URL}/wallet/deposit/pix`;
     const headers = this.getGatewayHeaders();
     
@@ -395,6 +471,9 @@ export const authService = {
   },
 
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
+      // Garante que as credenciais estejam disponíveis antes da requisição
+      await this.ensureCredentials();
+      
       const headers = this.getGatewayHeaders();
       const payload = {
           amount,
@@ -430,6 +509,8 @@ export const authService = {
 
   async getMyFees(): Promise<UserFees | null> {
       try {
+          // Garante que as credenciais estejam disponíveis antes da requisição
+          await this.ensureCredentials();
           const headers = this.getBasicHeaders();
           const res = await fetch(`${API_URL}/me/fees`, { headers: headers as any });
           const json = await res.json();
