@@ -357,10 +357,16 @@ export const authService = {
         throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
     }
 
+    const user = this.getUser();
+    if (!user?.id) {
+        throw new Error("Usuário não identificado. Faça login novamente.");
+    }
+
     const payload = {
       amount: Number(amount),
       currency: "BRL",
-      payMethod: "PIX"
+      payMethod: "PIX",
+      userId: user.id
     };
 
     const response = await fetch(url, {
