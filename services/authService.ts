@@ -93,15 +93,21 @@ export const authService = {
 
     const { appId, appSecret } = this._getStoredCredentials();
 
-    if (appId && appId !== "undefined" && appId !== "null") headers["app_id"] = String(appId);
-    if (appSecret && appSecret !== "undefined" && appSecret !== "null") headers["app_secret"] = String(appSecret);
+    if (appId && appId !== "undefined" && appId !== "null") {
+        headers["app_id"] = String(appId);
+        headers["client_id"] = String(appId); // Garante client_id para evitar erro 400
+    }
+    if (appSecret && appSecret !== "undefined" && appSecret !== "null") {
+        headers["app_secret"] = String(appSecret);
+        headers["client_secret"] = String(appSecret);
+    }
 
     return headers;
   },
 
   // Headers completos para o Gateway (POST Pix)
   getGatewayHeaders() {
-    return this.getBasicHeaders(); // Reuses the same logic as basic now includes app_id
+    return this.getBasicHeaders(); 
   },
 
   // --- NEW: System Status Check ---
@@ -115,7 +121,6 @@ export const authService = {
 
           if (response.ok) {
               const json = await response.json();
-              // Structure: { ok: true, data: { isActive: true, message: "..." } }
               if (json.data && json.data.isActive) {
                   return { 
                       maintenance: true, 
@@ -123,15 +128,11 @@ export const authService = {
                   };
               }
           } else if (response.status === 503) {
-              // Fallback for standard 503
               return { maintenance: true, message: "Serviço temporariamente indisponível." };
           }
           
           return { maintenance: false };
       } catch (error) {
-          console.error("Error checking maintenance status:", error);
-          // In case of network error, usually we allow the app to try loading, 
-          // unless it's a persistent connection issue which will be caught by other calls.
           return { maintenance: false };
       }
   },
@@ -149,7 +150,6 @@ export const authService = {
 
     const response = await requestWithRouteDiscovery("login", options);
     
-    // Check for maintenance on login
     if (response.status === 503) {
         throw new Error("MAINTENANCE_MODE");
     }
@@ -162,21 +162,15 @@ export const authService = {
     } else {
       const text = await response.text();
       console.error("Login response not JSON:", text);
-      throw new Error(
-        `Erro de conexão com API (${response.status}). Endpoint não encontrado.`
-      );
+      throw new Error(`Erro de conexão com API (${response.status}).`);
     }
 
     if (!response.ok) {
       if (data?.meta?.code === "USER_PENDING_APPROVAL") {
-        throw new Error(
-          "Cadastro em análise: Seu acesso ainda não foi aprovado pelo administrador."
-        );
+        throw new Error("Cadastro em análise: Seu acesso ainda não foi aprovado pelo administrador.");
       }
       const errorMessage = data.message || data.error || "Erro ao realizar login";
-      throw new Error(
-        Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage
-      );
+      throw new Error(Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage);
     }
 
     if (!data || !data.user) {
@@ -197,9 +191,11 @@ export const authService = {
     // Save user Object
     localStorage.setItem("mutual_user", JSON.stringify(normalizedUser));
 
-    // --- CORREÇÃO SOLICITADA: SALVAR userId NO LOCALSTORAGE ---
-    if (normalizedUser.id) {
-        localStorage.setItem("userId", String(normalizedUser.id));
+    // --- CORREÇÃO: SALVAR userId NO LOCALSTORAGE NO LOGIN ---
+    // Tenta pegar o ID de qualquer campo possível e salvar como número
+    const idToSave = normalizedUser.id || rawUser.id || rawUser.userId || rawUser.user_id;
+    if (idToSave) {
+        localStorage.setItem("userId", String(idToSave));
     }
 
     return {
@@ -218,13 +214,11 @@ export const authService = {
     };
 
     if (data.personType === "PF") {
-      if (!data.document)
-        throw new Error("CPF é obrigatório para Pessoa Física.");
+      if (!data.document) throw new Error("CPF é obrigatório para Pessoa Física.");
       payload.document = data.document.replace(/\D/g, "");
     } else {
       if (!data.cnpj) throw new Error("CNPJ é obrigatório para Pessoa Jurídica.");
-      if (!data.companyName)
-        throw new Error("Razão Social é obrigatória.");
+      if (!data.companyName) throw new Error("Razão Social é obrigatória.");
       payload.cnpj = data.cnpj.replace(/\D/g, "");
       payload.companyName = data.companyName;
       payload.tradeName = data.tradeName || null;
@@ -306,14 +300,12 @@ export const authService = {
         if (!user?.id) return [];
 
         const headers = this.getBasicHeaders();
-        // Use user-specific endpoint to align with balance request
         const response = await fetch(`${API_URL}/users/${user.id}/wallet/ledger`, {
             method: "GET",
             headers: headers as any
         });
         
         if (!response.ok) {
-            // Fallback to /me if /users/id fails, though usually /users/id is safer if we have ID
             const fallbackResponse = await fetch(`${API_URL}/me/wallet/ledger`, {
                 method: "GET",
                 headers: headers as any
@@ -355,34 +347,17 @@ export const authService = {
     orderId: string;
     expiresAt: string;
   }> {
-    
-    // 1. Validar Usuário
     const user = this.getUser();
-    if (!user || !user.id) {
-        throw new Error("Sessão expirada. Faça login novamente.");
-    }
+    if (!user || !user.id) throw new Error("Sessão expirada. Faça login novamente.");
     const userId = Number(user.id);
-
-    // 2. Montar URL com userId na query (para garantir)
     const url = `${API_URL}/wallet/deposit/pix?userId=${userId}`;
-    
-    // 3. Montar Headers Obrigatórios
     const headers = this.getGatewayHeaders();
     
-    if (!headers['app_id']) {
-        throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
-    }
-
-    // Injetar headers adicionais esperados (client_id, client_secret)
-    if (headers['app_id']) headers['client_id'] = headers['app_id'];
-    if (headers['app_secret']) headers['client_secret'] = headers['app_secret'];
-
-    // 4. Montar Body com userId
     const payload = {
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX",
-      userId: userId // Campo obrigatório
+      userId: userId 
     };
 
     const response = await fetch(url, {
@@ -395,53 +370,61 @@ export const authService = {
 
     if (!response.ok) {
         const errText = await response.text();
-        console.error("Erro API Pix:", errText);
         throw new Error("Falha ao gerar Pix: " + (errText || response.statusText));
     }
 
     const json = await response.json();
-    
     const qrCode = json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
     const qrCodeImage = json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
     const orderId = json.orderNo || json.id || json.data?.orderNo || "N/A";
 
-    if (!qrCode && !qrCodeImage) {
-        throw new Error("QR Code não retornado pela API.");
-    }
+    if (!qrCode && !qrCodeImage) throw new Error("QR Code não retornado pela API.");
 
-    return {
-        qrCode,
-        qrCodeImage,
-        orderId,
-        expiresAt: json.expiresAt || ""
-    };
+    return { qrCode, qrCodeImage, orderId, expiresAt: json.expiresAt || "" };
   },
 
-  // PIX OUT (Saque) - ATUALIZADO
+  // PIX OUT (Saque) - CORRIGIDO
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
       const headers = this.getGatewayHeaders();
 
-      // --- CORREÇÃO: Recuperar userId do localStorage ---
+      // 1. Tenta recuperar userId do localStorage
       let userId = Number(localStorage.getItem("userId"));
 
-      // Fallback de segurança (caso localStorage tenha sido limpo mas sessão esteja ativa)
+      // 2. Fallback: Se não achou ou é NaN, tenta extrair do objeto de usuário salvo
       if (!userId || isNaN(userId)) {
-          const user = this.getUser();
-          if (user?.id) userId = Number(user.id);
+          const userStr = localStorage.getItem("mutual_user");
+          if (userStr) {
+              try {
+                  const u = JSON.parse(userStr);
+                  // Tenta campos comuns de ID
+                  const extractedId = u.id || u.userId || u.user_id || u._id;
+                  if (extractedId && !isNaN(Number(extractedId))) {
+                      userId = Number(extractedId);
+                      // Auto-correção: salva para a próxima
+                      localStorage.setItem("userId", String(userId));
+                  }
+              } catch (e) {
+                  console.error("Erro ao recuperar ID do usuário salvo", e);
+              }
+          }
       }
 
-      if (!userId) {
-          throw new Error("ID de usuário não encontrado. Por favor, faça login novamente.");
+      // 3. Validação final do ID
+      if (!userId || isNaN(userId) || userId <= 0) {
+          throw new Error("Erro de Identificação: UserID não encontrado ou inválido. Por favor, faça logout e login novamente.");
       }
 
+      // 4. Monta payload conforme especificado: { userId, amount, pixKey }
       const payload = {
-          userId, // --- INCLUÍDO NO PAYLOAD ---
-          amount,
-          key: pixKey,
-          keyType,
+          userId: userId, // Obrigatório e numérico
+          amount: amount,
+          pixKey: pixKey, // Nome do campo conforme solicitado
+          keyType: keyType,
           payMethod: "PIX"
       };
       
+      console.log("Enviando Saque Payload:", payload);
+
       const response = await fetch(`${API_URL}/wallet/withdraw/pix`, {
           method: "POST",
           headers: headers as any,
@@ -449,12 +432,14 @@ export const authService = {
       });
       
       const json = await response.json();
-      if (!response.ok) throw new Error(json.message || "Erro no saque");
+      if (!response.ok) {
+          throw new Error(json.message || json.error || "Erro ao processar saque");
+      }
       
       return {
           ok: true,
           status: 'PENDING',
-          orderId: json.orderNo || 'WD-' + Date.now(),
+          orderId: json.orderNo || json.id || 'WD-' + Date.now(),
           amount
       };
   },
@@ -485,7 +470,7 @@ export const authService = {
     localStorage.removeItem("mutual_user");
     localStorage.removeItem("app_id");
     localStorage.removeItem("app_secret");
-    localStorage.removeItem("userId"); // Limpar userId ao sair
+    localStorage.removeItem("userId");
   },
 
   getToken() {
