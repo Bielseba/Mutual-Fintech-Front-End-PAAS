@@ -93,8 +93,9 @@ export const authService = {
 
     const { appId, appSecret } = this._getStoredCredentials();
 
-    if (appId && appId !== "undefined" && appId !== "null") headers["app_id"] = String(appId);
-    if (appSecret && appSecret !== "undefined" && appSecret !== "null") headers["app_secret"] = String(appSecret);
+    // Adiciona credenciais apenas se forem válidas
+    if (appId) headers["app_id"] = String(appId);
+    if (appSecret) headers["client_id"] = String(appSecret);
 
     return headers;
   },
