@@ -376,7 +376,7 @@ export const authService = {
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX",
-      userId: userId // Campo obrigatório
+      userId: user.id
     };
 
     const response = await fetch(url, {
@@ -395,9 +395,9 @@ export const authService = {
 
     const json = await response.json();
     
-    const qrCode = json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
-    const qrCodeImage = json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
-    const orderId = json.orderNo || json.id || json.data?.orderNo || "N/A";
+    const qrCode = json.pix.qrCodeText || json.pix.qrCode || json.pix.data?.qrCode || json.pix.emvqrcps;
+    const qrCodeImage = json.pix.qrCodeImage || json.pix.qrCodeBase64 || json.pix.data?.qrCodeImage;
+    const orderId = json.pix.orderNo || json.pix.id || json.pix.data?.orderNo || "N/A";
 
     if (!qrCode && !qrCodeImage) {
         throw new Error("QR Code não retornado pela API.");
