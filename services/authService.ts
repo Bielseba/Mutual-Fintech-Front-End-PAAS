@@ -395,7 +395,7 @@ export const authService = {
 
     const json = await response.json();
     
-    const qrCode = json.pix.qrCodeText || json.pix.qrCode || json.pix.data?.qrCode || json.pix.emvqrcps;
+    const qrCode = json.pix.qrCodeText || json.pix.qrCode || json.pix.data?.qrCode || json.pix.emvqrcps || json.pix.qrcode;
     const qrCodeImage = json.pix.qrCodeImage || json.pix.qrCodeBase64 || json.pix.data?.qrCodeImage;
     const orderId = json.pix.orderNo || json.pix.id || json.pix.data?.orderNo || "N/A";
 
