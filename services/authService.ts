@@ -194,7 +194,13 @@ export const authService = {
     if (appId) localStorage.setItem("app_id", String(appId));
     if (clientSecret) localStorage.setItem("app_secret", String(clientSecret));
 
+    // Save user Object
     localStorage.setItem("mutual_user", JSON.stringify(normalizedUser));
+
+    // --- CORREÇÃO SOLICITADA: SALVAR userId NO LOCALSTORAGE ---
+    if (normalizedUser.id) {
+        localStorage.setItem("userId", String(normalizedUser.id));
+    }
 
     return {
       token,
@@ -342,7 +348,7 @@ export const authService = {
     }));
   },
 
-  // PIX IN (Depósito) - Função Ajustada com userId, client_id e client_secret
+  // PIX IN (Depósito)
   async createPixCharge(amount: number): Promise<{
     qrCode: string;
     qrCodeImage: string;
@@ -376,7 +382,7 @@ export const authService = {
       amount: Number(amount),
       currency: "BRL",
       payMethod: "PIX",
-      userId: user.id
+      userId: userId // Campo obrigatório
     };
 
     const response = await fetch(url, {
@@ -395,9 +401,9 @@ export const authService = {
 
     const json = await response.json();
     
-    const qrCode = json.pix.qrCodeText || json.pix.qrCode || json.pix.data?.qrCode || json.pix.emvqrcps || json.pix.qrcode;
-    const qrCodeImage = json.pix.qrCodeImage || json.pix.qrCodeBase64 || json.pix.data?.qrCodeImage;
-    const orderId = json.pix.orderNo || json.pix.id || json.pix.data?.orderNo || "N/A";
+    const qrCode = json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
+    const qrCodeImage = json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
+    const orderId = json.orderNo || json.id || json.data?.orderNo || "N/A";
 
     if (!qrCode && !qrCodeImage) {
         throw new Error("QR Code não retornado pela API.");
@@ -411,26 +417,25 @@ export const authService = {
     };
   },
 
+  // PIX OUT (Saque) - ATUALIZADO
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
-      // 1. Validar Usuário
-      const user = this.getUser();
-      if (!user || !user.id) {
-          throw new Error("Sessão expirada. Faça login novamente.");
-      }
-
-      // 2. Montar Headers Obrigatórios
       const headers = this.getGatewayHeaders();
-      
-      if (!headers['app_id']) {
-          throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
+
+      // --- CORREÇÃO: Recuperar userId do localStorage ---
+      let userId = Number(localStorage.getItem("userId"));
+
+      // Fallback de segurança (caso localStorage tenha sido limpo mas sessão esteja ativa)
+      if (!userId || isNaN(userId)) {
+          const user = this.getUser();
+          if (user?.id) userId = Number(user.id);
       }
 
-      // Injetar headers adicionais esperados (client_id, client_secret)
-      if (headers['app_id']) headers['client_id'] = headers['app_id'];
-      if (headers['app_secret']) headers['client_secret'] = headers['app_secret'];
+      if (!userId) {
+          throw new Error("ID de usuário não encontrado. Por favor, faça login novamente.");
+      }
 
-      // 3. Montar Body
       const payload = {
+          userId, // --- INCLUÍDO NO PAYLOAD ---
           amount,
           key: pixKey,
           keyType,
@@ -480,6 +485,7 @@ export const authService = {
     localStorage.removeItem("mutual_user");
     localStorage.removeItem("app_id");
     localStorage.removeItem("app_secret");
+    localStorage.removeItem("userId"); // Limpar userId ao sair
   },
 
   getToken() {

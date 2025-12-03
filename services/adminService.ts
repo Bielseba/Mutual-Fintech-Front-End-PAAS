@@ -1,7 +1,7 @@
 
 import { MedSummary, MedAlert } from '../types';
 
-const API_URL = "https://api.ominigateway.com.br/api";
+const API_URL = "https://mutual-fintech-user-service.vercel.app/api";
 
 const getToken = () => localStorage.getItem("mutual_token");
 
