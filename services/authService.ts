@@ -93,9 +93,8 @@ export const authService = {
 
     const { appId, appSecret } = this._getStoredCredentials();
 
-    // Adiciona credenciais apenas se forem válidas
-    if (appId) headers["app_id"] = String(appId);
-    if (appSecret) headers["client_id"] = String(appSecret);
+    if (appId && appId !== "undefined" && appId !== "null") headers["app_id"] = String(appId);
+    if (appSecret && appSecret !== "undefined" && appSecret !== "null") headers["app_secret"] = String(appSecret);
 
     return headers;
   },
@@ -343,25 +342,36 @@ export const authService = {
     }));
   },
 
-  // PIX IN (Depósito)
+  // PIX IN (Depósito) - Função Ajustada com userId, client_id e client_secret
   async createPixCharge(amount: number): Promise<{
     qrCode: string;
     qrCodeImage: string;
     orderId: string;
     expiresAt: string;
   }> {
-    const url = `${API_URL}/wallet/deposit/pix`;
+    
+    // 1. Validar Usuário
+    const user = this.getUser();
+    if (!user || !user.id) {
+        throw new Error("Sessão expirada. Faça login novamente.");
+    }
+    const userId = Number(user.id);
+
+    // 2. Montar URL com userId na query (para garantir)
+    const url = `${API_URL}/wallet/deposit/pix?userId=${userId}`;
+    
+    // 3. Montar Headers Obrigatórios
     const headers = this.getGatewayHeaders();
     
     if (!headers['app_id']) {
         throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
     }
 
-    const user = this.getUser();
-    if (!user?.id) {
-        throw new Error("Usuário não identificado. Faça login novamente.");
-    }
+    // Injetar headers adicionais esperados (client_id, client_secret)
+    if (headers['app_id']) headers['client_id'] = headers['app_id'];
+    if (headers['app_secret']) headers['client_secret'] = headers['app_secret'];
 
+    // 4. Montar Body com userId
     const payload = {
       amount: Number(amount),
       currency: "BRL",
