@@ -412,7 +412,24 @@ export const authService = {
   },
 
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
+      // 1. Validar Usuário
+      const user = this.getUser();
+      if (!user || !user.id) {
+          throw new Error("Sessão expirada. Faça login novamente.");
+      }
+
+      // 2. Montar Headers Obrigatórios
       const headers = this.getGatewayHeaders();
+      
+      if (!headers['app_id']) {
+          throw new Error("Credenciais de API (App ID) não encontradas. Por favor, faça logout e login novamente.");
+      }
+
+      // Injetar headers adicionais esperados (client_id, client_secret)
+      if (headers['app_id']) headers['client_id'] = headers['app_id'];
+      if (headers['app_secret']) headers['client_secret'] = headers['app_secret'];
+
+      // 3. Montar Body
       const payload = {
           amount,
           key: pixKey,
