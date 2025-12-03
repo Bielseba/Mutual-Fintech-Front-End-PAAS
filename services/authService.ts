@@ -192,10 +192,11 @@ export const authService = {
     localStorage.setItem("mutual_user", JSON.stringify(normalizedUser));
 
     // --- CORREÇÃO: SALVAR userId NO LOCALSTORAGE NO LOGIN ---
-    // Tenta pegar o ID de qualquer campo possível e salvar como número
     const idToSave = normalizedUser.id || rawUser.id || rawUser.userId || rawUser.user_id;
     if (idToSave) {
         localStorage.setItem("userId", String(idToSave));
+    } else {
+        console.warn("UserID não encontrado na resposta de login para salvar.");
     }
 
     return {
@@ -387,20 +388,18 @@ export const authService = {
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
       const headers = this.getGatewayHeaders();
 
-      // 1. Tenta recuperar userId do localStorage
+      // 1. Recuperar userId do localStorage
       let userId = Number(localStorage.getItem("userId"));
 
-      // 2. Fallback: Se não achou ou é NaN, tenta extrair do objeto de usuário salvo
+      // 2. Fallback robusto se userId não estiver limpo
       if (!userId || isNaN(userId)) {
           const userStr = localStorage.getItem("mutual_user");
           if (userStr) {
               try {
                   const u = JSON.parse(userStr);
-                  // Tenta campos comuns de ID
                   const extractedId = u.id || u.userId || u.user_id || u._id;
                   if (extractedId && !isNaN(Number(extractedId))) {
                       userId = Number(extractedId);
-                      // Auto-correção: salva para a próxima
                       localStorage.setItem("userId", String(userId));
                   }
               } catch (e) {
@@ -409,18 +408,28 @@ export const authService = {
           }
       }
 
-      // 3. Validação final do ID
       if (!userId || isNaN(userId) || userId <= 0) {
-          throw new Error("Erro de Identificação: UserID não encontrado ou inválido. Por favor, faça logout e login novamente.");
+          throw new Error("Sessão inválida (UserID ausente). Por favor, saia e entre novamente.");
       }
 
-      // 4. Monta payload conforme especificado: { userId, amount, pixKey }
+      // 3. Mapear o keyType para o formato StarPago (minusculo e específico)
+      // O front envia: CPF, CNPJ, EMAIL, PHONE, EVP (Do componente PixTransfer.tsx)
+      const inputType = keyType.toUpperCase();
+      let apiType = 'evp';
+
+      if (inputType === 'CPF') apiType = 'cpf';
+      else if (inputType === 'CNPJ') apiType = 'cnpj';
+      else if (inputType === 'EMAIL') apiType = 'email';
+      else if (inputType === 'PHONE' || inputType === 'CELULAR' || inputType === 'MOBILE') apiType = 'mobile';
+      else apiType = 'evp';
+
+      // 4. Montar Payload conforme documentação StarPago
       const payload = {
-          userId: userId, // Obrigatório e numérico
+          userId: userId,
           amount: amount,
-          pixKey: pixKey, // Nome do campo conforme solicitado
-          keyType: keyType,
-          payMethod: "PIX"
+          key: pixKey,      // Nome exigido: 'key' (não pixKey)
+          keyType: apiType, // Nome exigido: 'keyType' (valores: cpf, cnpj, email, mobile, evp)
+          bankCode: apiType // Exigência da API: bankCode deve ser igual ao keyType para Pix
       };
       
       console.log("Enviando Saque Payload:", payload);
@@ -433,7 +442,8 @@ export const authService = {
       
       const json = await response.json();
       if (!response.ok) {
-          throw new Error(json.message || json.error || "Erro ao processar saque");
+          const errorMsg = json.message || json.error || "Erro ao processar saque";
+          throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
       
       return {
