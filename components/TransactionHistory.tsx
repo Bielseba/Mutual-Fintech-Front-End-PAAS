@@ -36,6 +36,43 @@ const TransactionIcon = ({ type, isCredit }: { type: string, isCredit: boolean }
   return <ArrowUpRight className="w-5 h-5 text-rose-600" />;
 };
 
+// --- HELPER DE LIMPEZA DE DESCRIÇÃO ---
+const cleanDescription = (desc: string, type: string, amount: number) => {
+    if (!desc) return amount > 0 ? 'Depósito Pix' : 'Transferência Pix';
+
+    // 1. Tentar parsear se for JSON
+    if (desc.trim().startsWith('{') || desc.trim().startsWith('[')) {
+        try {
+            const obj = JSON.parse(desc);
+            // Tenta pegar campos comuns
+            if (obj.description) return obj.description;
+            if (obj.reason) return obj.reason;
+            if (obj.type === 'PIX') return amount > 0 ? 'Recebimento Pix' : 'Envio Pix';
+        } catch (e) {
+            // Se falhar o parse, continua para as regras de string
+        }
+    }
+
+    // 2. Limpeza de Strings "Sujas" (Gateways, IDs técnicos)
+    const lower = desc.toLowerCase();
+
+    if (lower.includes('starpago') || lower.includes('merorderno') || lower.includes('wd-')) {
+        return 'Saque Pix';
+    }
+    
+    if (lower.includes('pix sent') || lower.includes('envio pix')) return 'Envio Pix';
+    if (lower.includes('pix received') || lower.includes('recebimento pix')) return 'Recebimento Pix';
+    if (lower.includes('depósito') || lower.includes('deposit')) return 'Depósito Pix';
+    if (lower.includes('withdraw') || lower.includes('saque')) return 'Saque Pix';
+
+    // 3. Fallback genérico baseado no tipo se a descrição for muito genérica ou técnica demais
+    if (desc === 'Transação' || desc === 'Wallet Transfer' || desc.length > 50) {
+        return amount > 0 ? 'Depósito Pix' : 'Saque Pix';
+    }
+
+    return desc;
+};
+
 export const TransactionHistory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'detailed' | 'consolidated'>('detailed');
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,7 +142,7 @@ export const TransactionHistory: React.FC = () => {
       if (searchTerm) {
           const term = searchTerm.toLowerCase();
           filtered = filtered.filter(t => 
-             t.description.toLowerCase().includes(term) || 
+             cleanDescription(t.description, t.type, t.amount).toLowerCase().includes(term) ||
              t.id.toLowerCase().includes(term) ||
              String(t.amount).includes(term)
           );
@@ -124,7 +161,7 @@ export const TransactionHistory: React.FC = () => {
           tx.id,
           new Date(tx.date).toLocaleDateString('pt-BR'),
           new Date(tx.date).toLocaleTimeString('pt-BR'),
-          `"${tx.description}"`, // Escape commas
+          `"${cleanDescription(tx.description, tx.type, tx.amount)}"`,
           tx.type === 'CREDIT' ? 'Entrada' : 'Saída',
           tx.amount.toFixed(2).replace('.', ','),
           tx.status,
@@ -132,10 +169,7 @@ export const TransactionHistory: React.FC = () => {
           tx.recipient || '-'
       ]);
 
-      // Join with semicolons for Excel compatibility in Brazil
       const csvContent = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-      
-      // Add BOM for proper UTF-8 handling in Excel
       const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -230,7 +264,7 @@ export const TransactionHistory: React.FC = () => {
                                 <div style="color: #94a3b8; font-size: 10px">${new Date(tx.date).toLocaleTimeString('pt-BR')}</div>
                             </td>
                             <td style="font-family: monospace;">${tx.id.substring(0,8)}...</td>
-                            <td>${tx.description}</td>
+                            <td>${cleanDescription(tx.description, tx.type, tx.amount)}</td>
                             <td>${isCredit ? 'ENTRADA' : 'SAÍDA'}</td>
                             <td><span class="status" style="background: #e2e8f0;">${tx.status}</span></td>
                             <td class="amount" style="color: ${isCredit ? '#10b981' : '#f43f5e'}">
@@ -531,7 +565,7 @@ export const TransactionHistory: React.FC = () => {
                                         <TransactionIcon type={tx.type} isCredit={isCredit} />
                                     </div>
                                     <div>
-                                        <p className="font-bold text-slate-900">{tx.description}</p>
+                                        <p className="font-bold text-slate-900">{cleanDescription(tx.description, tx.type, tx.amount)}</p>
                                         <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {tx.id.substring(0,8)}...</p>
                                     </div>
                                 </div>
@@ -612,7 +646,7 @@ export const TransactionHistory: React.FC = () => {
                                     </div>
                                     <div>
                                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Tipo</span>
-                                        <p className="text-sm font-bold text-slate-900">{viewingReceipt.description}</p>
+                                        <p className="text-sm font-bold text-slate-900">{cleanDescription(viewingReceipt.description, viewingReceipt.type, viewingReceipt.amount)}</p>
                                     </div>
                                 </div>
 
