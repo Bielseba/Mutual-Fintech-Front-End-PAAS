@@ -341,7 +341,7 @@ export const authService = {
     }));
   },
 
-  // PIX IN (Depósito)
+  // PIX IN (Depósito) - CORRIGIDO PARA LER json.pix.qrcode
   async createPixCharge(amount: number): Promise<{
     qrCode: string;
     qrCodeImage: string;
@@ -375,16 +375,26 @@ export const authService = {
     }
 
     const json = await response.json();
-    const qrCode = json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
-    const qrCodeImage = json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
-    const orderId = json.orderNo || json.id || json.data?.orderNo || "N/A";
+    
+    // CORREÇÃO: Mapeamento para estrutura aninhada (json.pix.qrcode)
+    const qrCode = json.pix?.qrcode || json.qrCodeText || json.qrCode || json.data?.qrCode || json.emvqrcps;
+    
+    // Imagem base64 opcional (json.pix.qrCodeImage ou outros formatos)
+    const qrCodeImage = json.pix?.qrCodeImage || json.qrCodeImage || json.qrCodeBase64 || json.data?.qrCodeImage;
+    
+    // Mapeamento de ID e Expiração
+    const orderId = json.id || json.orderNo || json.data?.orderNo || "N/A";
+    const expiresAt = json.pix?.expirationDate || json.expiresAt || "";
 
-    if (!qrCode && !qrCodeImage) throw new Error("QR Code não retornado pela API.");
+    if (!qrCode && !qrCodeImage) {
+        console.error("Payload JSON recebido:", json);
+        throw new Error("QR Code não retornado pela API.");
+    }
 
-    return { qrCode, qrCodeImage, orderId, expiresAt: json.expiresAt || "" };
+    return { qrCode, qrCodeImage, orderId, expiresAt: expiresAt };
   },
 
-  // PIX OUT (Saque) - CORRIGIDO
+  // PIX OUT (Saque)
   async createPixWithdraw(amount: number, pixKey: string, keyType: string): Promise<any> {
       const headers = this.getGatewayHeaders();
 
@@ -412,8 +422,7 @@ export const authService = {
           throw new Error("Sessão inválida (UserID ausente). Por favor, saia e entre novamente.");
       }
 
-      // 3. Mapear o keyType para o formato StarPago (minusculo e específico)
-      // O front envia: CPF, CNPJ, EMAIL, PHONE, EVP (Do componente PixTransfer.tsx)
+      // 3. Mapear o keyType para o formato StarPago
       const inputType = keyType.toUpperCase();
       let apiType = 'evp';
 
@@ -427,9 +436,9 @@ export const authService = {
       const payload = {
           userId: userId,
           amount: amount,
-          key: pixKey,      // Nome exigido: 'key' (não pixKey)
-          keyType: apiType, // Nome exigido: 'keyType' (valores: cpf, cnpj, email, mobile, evp)
-          bankCode: apiType // Exigência da API: bankCode deve ser igual ao keyType para Pix
+          key: pixKey,
+          keyType: apiType,
+          bankCode: apiType 
       };
       
       console.log("Enviando Saque Payload:", payload);
