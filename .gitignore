@@ -6,8 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+/API
+API/
+antigo_copiar/
+antigo_copiar/**
 
-node_modules
+node_modules/
 dist
 dist-ssr
 *.local

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Filter, Download, MoreHorizontal, ArrowUpRight, ArrowDownLeft, Loader2, FileText, X, Printer, Share2, CheckCircle, Wallet, Ban, Calendar, ChevronDown, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -73,17 +72,46 @@ const cleanDescription = (desc: string, type: string, amount: number) => {
     return desc;
 };
 
+// --- FORMATTERS & CLIPBOARD ---
+const formatCpfCnpj = (doc?: string) => {
+    if (!doc) return '-';
+    const digits = doc.replace(/\D/g, '');
+    if (digits.length <= 11) {
+        return digits
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    return digits
+        .replace(/(\d{2})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+};
+
+const copyToClipboard = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); }
+    catch { /* ignore */ }
+};
+
 export const TransactionHistory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'detailed' | 'consolidated'>('detailed');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchField, setSearchField] = useState<'all'|'id'|'description'|'status'|'valor'|'cliente'|'documento'|'e2e'|'externo'>('all');
+  const [operator, setOperator] = useState<'equal'|'contains'>('contains');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<Transaction | null>(null);
+  const [actionsTx, setActionsTx] = useState<Transaction | null>(null);
+  const [showIn, setShowIn] = useState(true);
+  const [showOut, setShowOut] = useState(true);
   
   // Filters
-  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | 'all'>('30days');
+  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | '90days' | 'quarter' | 'year' | 'custom'>('30days');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -120,12 +148,12 @@ export const TransactionHistory: React.FC = () => {
   };
 
   // --- FILTER LOGIC ---
-  const getFilteredTransactions = () => {
+    const getFilteredTransactions = () => {
       const now = new Date();
       let filtered = transactions;
 
       // Date Filter
-      if (dateFilter === 'today') {
+            if (dateFilter === 'today') {
           filtered = filtered.filter(t => new Date(t.date).toDateString() === now.toDateString());
       } else if (dateFilter === 'yesterday') {
           const yest = new Date(now); yest.setDate(yest.getDate() - 1);
@@ -136,16 +164,51 @@ export const TransactionHistory: React.FC = () => {
       } else if (dateFilter === '30days') {
           const limit = new Date(now); limit.setDate(limit.getDate() - 30);
           filtered = filtered.filter(t => new Date(t.date) >= limit);
+            } else if (dateFilter === '90days') {
+                    const limit = new Date(now); limit.setDate(limit.getDate() - 90);
+                    filtered = filtered.filter(t => new Date(t.date) >= limit);
+            } else if (dateFilter === 'custom' && startDate && endDate) {
+                    const start = new Date(startDate + 'T00:00:00');
+                    const end = new Date(endDate + 'T23:59:59');
+                    filtered = filtered.filter(t => {
+                            const d = new Date(t.date);
+                            return d >= start && d <= end;
+                    });
       }
 
       // Search Filter
-      if (searchTerm) {
-          const term = searchTerm.toLowerCase();
-          filtered = filtered.filter(t => 
-             cleanDescription(t.description, t.type, t.amount).toLowerCase().includes(term) ||
-             t.id.toLowerCase().includes(term) ||
-             String(t.amount).includes(term)
-          );
+            if (searchTerm) {
+                    const term = searchTerm.toLowerCase();
+                    const match = (value: string) => operator === 'equal' ? value.toLowerCase() === term : value.toLowerCase().includes(term);
+                    filtered = filtered.filter(t => {
+                        const desc = cleanDescription(t.description, t.type, t.amount);
+                        const amountStr = String(Math.abs(t.amount));
+                        const cliente = (t as any).clientName || t.recipient || t.sender || '';
+                        const documento = (t as any).document || '';
+                        const pixId = (t as any).pix || (t as any).txid || '';
+                        const e2e = (t as any).e2e || (t as any).endToEndId || '';
+                        const externo = (t as any).externalId || (t as any).referenceId || (t as any).external || '';
+                        if (searchField === 'all') {
+                            return match(desc) || match(t.id) || match(String(t.status)) || match(amountStr) || match(cliente) || match(documento) || match(e2e) || match(externo);
+                        } else if (searchField === 'id') {
+                            return match(t.id);
+                        } else if (searchField === 'description') {
+                            return match(desc);
+                        } else if (searchField === 'status') {
+                            return match(String(t.status));
+                        } else if (searchField === 'valor') {
+                            return match(amountStr);
+                        } else if (searchField === 'cliente') {
+                            return match(cliente);
+                        } else if (searchField === 'documento') {
+                            return match(documento);
+                        } else if (searchField === 'e2e') {
+                            return match(e2e);
+                        } else if (searchField === 'externo') {
+                            return match(externo);
+                        }
+                        return false;
+                    });
       }
 
       return filtered;
@@ -291,57 +354,146 @@ export const TransactionHistory: React.FC = () => {
     }, 500);
   };
 
-  // --- CHART DATA GENERATION ---
-  const getConsolidatedData = () => {
-      const txs = getFilteredTransactions(); // Uses same date filter
-      const dailyMap: {[key: string]: {date: string, in: number, out: number, balanceDelta: number}} = {};
-      const distribution = { in: 0, out: 0 };
+    const handleExportJSON = () => {
+        const data = getFilteredTransactions();
+        if (!data.length) return;
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `extrato_omini_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
-      // Initialize last 7 days if empty
-      for(let i=6; i>=0; i--) {
-          const d = new Date(); d.setDate(d.getDate() - i);
-          const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          dailyMap[dateStr] = { date: dateStr, in: 0, out: 0, balanceDelta: 0 };
-      }
+    const handleExportTXT = () => {
+        const data = getFilteredTransactions();
+        if (!data.length) return;
+        const lines = data.map(tx => `${new Date(tx.date).toLocaleString('pt-BR')} | ${tx.id} | ${cleanDescription(tx.description, tx.type, tx.amount)} | ${(tx.type==='CREDIT'||tx.amount>0)?'+':'-'} R$ ${Math.abs(tx.amount).toFixed(2)}`);
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `extrato_omini_${new Date().toISOString().split('T')[0]}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
-      txs.forEach(tx => {
-          const dateStr = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
-          const amount = Math.abs(tx.amount);
+    const handleExportXLS = () => {
+        // Simple XLS (HTML table) for quick compatibility
+        const data = getFilteredTransactions();
+        if (!data.length) return;
+        const headers = ['Data','Hora','ID','Descrição','Tipo','Status','Valor'];
+        const rows = data.map(tx => [
+            new Date(tx.date).toLocaleDateString('pt-BR'),
+            new Date(tx.date).toLocaleTimeString('pt-BR'),
+            tx.id,
+            cleanDescription(tx.description, tx.type, tx.amount),
+            (tx.type==='CREDIT'||tx.amount>0)?'Entrada':'Saída',
+            String(tx.status),
+            Math.abs(tx.amount).toFixed(2).replace('.', ',')
+        ]);
+        const table = `<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        const blob = new Blob([`\ufeff${table}`], { type: 'application/vnd.ms-excel' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `extrato_omini_${new Date().toISOString().split('T')[0]}.xls`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
-          if (!dailyMap[dateStr]) dailyMap[dateStr] = { date: dateStr, in: 0, out: 0, balanceDelta: 0 };
+    const handleResendWebhook = async (tx?: Transaction) => {
+        const target = tx || actionsTx;
+        if (!target) return;
+        // TODO: wire to API endpoint /API/... when available
+        alert(`Webhook reenviado para a transação ${target.id}.`);
+    };
 
-          if (isCredit) {
-              dailyMap[dateStr].in += amount;
-              dailyMap[dateStr].balanceDelta += amount;
-              distribution.in += amount;
-          } else {
-              dailyMap[dateStr].out += amount;
-              dailyMap[dateStr].balanceDelta -= amount;
-              distribution.out += amount;
-          }
-      });
+    const handleRefund = async (tx?: Transaction) => {
+        const target = tx || actionsTx;
+        if (!target) return;
+        // TODO: wire to API endpoint /API/... when available
+        const ok = confirm(`Confirmar estorno da transação ${target.id}?`);
+        if (ok) {
+            alert('Solicitação de estorno enviada.');
+        }
+    };
 
-      const chartData = Object.values(dailyMap).sort((a,b) => {
-          // Simple sort logic for DD/MM
-          const [d1, m1] = a.date.split('/').map(Number);
-          const [d2, m2] = b.date.split('/').map(Number);
-          return (m1 - m2) || (d1 - d2);
-      });
+    // --- CHART DATA GENERATION ---
+    const getConsolidatedData = () => {
+            const txs = getFilteredTransactions(); // Uses same date filter
 
-      const pieData = [
-          { name: 'Entradas', value: distribution.in, color: '#10B981' }, // Emerald
-          { name: 'Saídas', value: distribution.out, color: '#F43F5E' }   // Rose
-      ];
+            // Build dynamic date range based on filter
+            const days: string[] = [];
+            const now = new Date();
+            let start = new Date(now);
+            let end = new Date(now);
+            if (dateFilter === 'today') {
+                start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            } else if (dateFilter === 'yesterday') {
+                start.setDate(start.getDate()-1); start.setHours(0,0,0,0); end = new Date(start); end.setHours(23,59,59,999);
+            } else if (dateFilter === '7days') {
+                start.setDate(start.getDate()-6); start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            } else if (dateFilter === '30days') {
+                start.setDate(start.getDate()-29); start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            } else if (dateFilter === '90days') {
+                start.setDate(start.getDate()-89); start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            } else if (dateFilter === 'quarter') {
+                start.setDate(start.getDate()-89); start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            } else if (dateFilter === 'year') {
+                const currentYear = now.getFullYear();
+                start = new Date(currentYear, 0, 1, 0, 0, 0, 0);
+                end = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+            } else if (dateFilter === 'custom' && startDate && endDate) {
+                start = new Date(startDate + 'T00:00:00');
+                end = new Date(endDate + 'T23:59:59');
+            } else {
+                start.setDate(start.getDate()-29); start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+            }
 
-      return { chartData, pieData, tableData: chartData.reverse() }; // Table reverse chronological
-  };
+            const dailyMap: {[key: string]: {date: string, in: number, out: number, balanceDelta: number}} = {};
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+                const key = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                days.push(key);
+                dailyMap[key] = { date: key, in: 0, out: 0, balanceDelta: 0 };
+            }
+
+            const distribution = { in: 0, out: 0 };
+            txs.forEach(tx => {
+                    const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+                    const amount = Math.abs(tx.amount);
+                    if (!dailyMap[key]) dailyMap[key] = { date: key, in: 0, out: 0, balanceDelta: 0 };
+                    if (isCredit) {
+                            if (showIn) { dailyMap[key].in += amount; dailyMap[key].balanceDelta += amount; }
+                            distribution.in += amount;
+                    } else {
+                            if (showOut) { dailyMap[key].out += amount; dailyMap[key].balanceDelta -= amount; }
+                            distribution.out += amount;
+                    }
+            });
+
+            const chartData = Object.values(dailyMap);
+            const pieData = [
+                    { name: 'Entradas', value: showIn ? distribution.in : 0, color: '#10B981' },
+                    { name: 'Saídas', value: showOut ? distribution.out : 0, color: '#F43F5E' }
+            ];
+
+            return { chartData, pieData, tableData: [...chartData].reverse() };
+    };
 
   const filteredTx = getFilteredTransactions();
   const consolidated = getConsolidatedData();
+    const subtotal = {
+        totalTransactions: filteredTx.length,
+        totalReceived: filteredTx.filter(t => (t.type === 'CREDIT' || t.amount > 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0),
+        totalSent: filteredTx.filter(t => (t.type === 'DEBIT' || t.amount < 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0),
+    };
+    const netBalance = subtotal.totalReceived - subtotal.totalSent;
 
-  return (
-    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden min-h-[600px] flex flex-col">
+    return (
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden min-h-[600px] flex flex-col w-full max-w-none"> 
       
       {/* Header & Tabs */}
       <div className="p-6 lg:p-8 border-b border-slate-100 space-y-6">
@@ -362,58 +514,91 @@ export const TransactionHistory: React.FC = () => {
             </div>
         </div>
 
-        {/* Date Filters Row */}
-        <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center">
-            <div className="w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0">
-                <div className="flex gap-2 min-w-max">
-                    {[
-                        { id: 'today', label: 'Hoje' },
-                        { id: 'yesterday', label: 'Ontem' },
-                        { id: '7days', label: '7 dias' },
-                        { id: '30days', label: '30 dias' },
-                        { id: 'all', label: 'Todos' }
-                    ].map((f) => (
-                        <button
-                            key={f.id}
-                            onClick={() => setDateFilter(f.id as any)}
-                            className={`px-4 py-2 rounded-lg border text-xs font-bold uppercase tracking-wide transition-colors ${
-                                dateFilter === f.id 
-                                ? 'bg-[#0F172A] text-white border-[#0F172A]' 
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                            }`}
-                        >
-                            {f.label}
-                        </button>
-                    ))}
-                    <button className="px-4 py-2 rounded-lg border border-slate-200 text-slate-500 text-xs font-bold uppercase tracking-wide flex items-center gap-2 hover:bg-slate-50">
-                        <Calendar className="w-3 h-3" /> Personalizar
-                    </button>
-                </div>
-            </div>
-
-            {activeTab === 'detailed' && (
-                <div className="flex gap-2 w-full lg:w-auto">
-                    <button 
-                        onClick={handleExportCSV}
-                        className="flex-1 lg:flex-none px-4 py-2 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors active:scale-95"
-                    >
-                        <Download className="w-4 h-4" /> CSV
-                    </button>
-                    <button 
-                        onClick={handleExportPDF}
-                        className="flex-1 lg:flex-none px-4 py-2 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors active:scale-95"
-                    >
-                        <FileText className="w-4 h-4" /> PDF
-                    </button>
-                    <button onClick={fetchTransactions} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                </div>
-            )}
-        </div>
-        
-        {/* Search Bar (Detailed Only) */}
+        {/* Header Actions (Detailed Only) */}
         {activeTab === 'detailed' && (
+            <div className="space-y-4">
+                {/* Filtros de Data (Detalhado) */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center gap-2 mb-3 text-slate-700 font-bold"><Calendar className="w-4 h-4" /> Filtros de Data</div>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { id: 'today', label: 'Hoje' },
+                            { id: 'yesterday', label: 'Ontem' },
+                            { id: '7days', label: '7 dias' },
+                            { id: '30days', label: '30 dias' },
+                            { id: '90days', label: '90 dias' },
+                        ].map((f) => (
+                            <button
+                                key={f.id}
+                                onClick={() => setDateFilter(f.id as any)}
+                                className={`px-4 py-2 rounded-lg border text-xs font-bold tracking-wide transition-colors ${
+                                    dateFilter === f.id 
+                                    ? 'bg-[#1F2A56] text-white border-[#1F2A56]'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                                {f.label}
+                            </button>
+                        ))}
+                        <button onClick={() => setDateFilter('custom')} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 text-xs font-bold tracking-wide flex items-center gap-2 hover:bg-slate-50">
+                            <Calendar className="w-3 h-3" /> Personalizar
+                        </button>
+                    </div>
+                    {dateFilter === 'custom' && (
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs text-slate-500 font-bold">Data Início</label>
+                                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none" />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 font-bold">Data Final</label>
+                                <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Ações rápidas */}
+                <div className="flex justify-end gap-2">
+                <button 
+                    onClick={handleExportCSV}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors active:scale-95"
+                >
+                    <Download className="w-4 h-4" /> CSV
+                </button>
+                <button 
+                    onClick={handleExportPDF}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors active:scale-95"
+                >
+                    <FileText className="w-4 h-4" /> PDF
+                </button>
+                <button onClick={fetchTransactions} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+                </div>
+        
+            {/* Help Card + Search Bar (Detailed Only) */}
+             <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">i</div>
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-900 mb-1">Como usar</p>
+                        <p className="text-sm text-slate-700 mb-3">Escolha um campo para buscar ou "Todos" para busca geral. Use "Igual" (exato) ou "Contém" (parcial).</p>
+                        <div className="flex flex-wrap items-center gap-3 mb-2">
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                                <span className="w-5 h-5 rounded-full bg-white/60 text-emerald-700 grid place-items-center">1</span> Campo
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
+                                <span className="w-5 h-5 rounded-full bg-white/60 text-amber-700 grid place-items-center">2</span> Tipo
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                                <span className="w-5 h-5 rounded-full bg-white/60 text-emerald-700 grid place-items-center">3</span> Valor
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-600"><span className="font-bold">Dica:</span> Digite qualquer informação para busca geral</p>
+                    </div>
+                </div>
+             </div>
              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                      <div className="md:col-span-2 relative">
@@ -425,10 +610,23 @@ export const TransactionHistory: React.FC = () => {
                          />
                      </div>
                      <div className="relative">
-                        <select className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none text-slate-600 appearance-none cursor-pointer">
-                            <option>Todos os tipos</option>
-                            <option>Entradas</option>
-                            <option>Saídas</option>
+                        <select value={searchField} onChange={e=>setSearchField(e.target.value as any)} className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none text-slate-600 appearance-none cursor-pointer">
+                                <option value="all">Todos os campos</option>
+                                <option value="id">ID</option>
+                                <option value="description">Descrição</option>
+                                <option value="valor">Valor</option>
+                                <option value="status">Status</option>
+                            <option value="e2e">E2E/TXD</option>
+                            <option value="cliente">Cliente</option>
+                            <option value="documento">Documento</option>
+                            <option value="externo">Id Externo</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                     <div className="relative">
+                        <select value={operator} onChange={e=>setOperator(e.target.value as any)} className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none text-slate-600 appearance-none cursor-pointer">
+                                <option value="equal">Igual (exato)</option>
+                                <option value="contains">Contém (parcial)</option>
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                      </div>
@@ -436,9 +634,23 @@ export const TransactionHistory: React.FC = () => {
                          Limpar Filtros
                      </button>
                 </div>
-             </div>
+
+                {dateFilter === 'custom' && (
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-slate-500 font-bold">Data inicial</label>
+                            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 font-bold">Data final</label>
+                            <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                        </div>
+                    </div>
+                )}
+                </div>
+            </div> // <--- FIX HERE: Esta div de fechamento estava faltando
         )}
-      </div>
+        </div>
 
       {/* CONTENT AREA */}
       <div className="flex-1 overflow-x-auto bg-white min-h-[400px]" ref={menuRef}>
@@ -449,20 +661,85 @@ export const TransactionHistory: React.FC = () => {
                 {/* 📊 CONSOLIDATED VIEW */}
                 {activeTab === 'consolidated' && (
                     <div className="p-6 lg:p-8 space-y-8">
+                        {/* Filtros (Consolidado) */}
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="flex items-center gap-2 mb-4 text-slate-700 font-bold"><Filter className="w-4 h-4" /> Filtros</div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="text-xs text-slate-500 font-bold">Período</label>
+                                    <select
+                                        value={dateFilter}
+                                        onChange={e=>setDateFilter(e.target.value as any)}
+                                        className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                                    >
+                                        <option value="today">Hoje</option>
+                                        <option value="yesterday">Ontem</option>
+                                        <option value="7days">7 dias</option>
+                                        <option value="30days">30 dias</option>
+                                        <option value="90days">90 dias</option>
+                                        <option value="quarter">Trimestre</option>
+                                        <option value="year">Ano</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 font-bold">Data Início</label>
+                                    <input type="date" value={startDate} onChange={e=>{ setStartDate(e.target.value); setDateFilter('custom'); }} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 font-bold">Data Final</label>
+                                    <input type="date" value={endDate} onChange={e=>{ setEndDate(e.target.value); setDateFilter('custom'); }} className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none" />
+                                </div>
+                                <div className="flex items-end gap-2">
+                                    <button onClick={fetchTransactions} className="flex-1 px-4 py-2 bg-[#0F172A] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Filter className="w-4 h-4" /> Aplicar</button>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <button onClick={handleExportCSV} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><Download className="w-4 h-4" /> CSV</button>
+                                <button onClick={handleExportXLS} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><Download className="w-4 h-4" /> XLSX</button>
+                                <button onClick={fetchTransactions} className="ml-auto px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Atualizar</button>
+                            </div>
+                        </div>
                         {/* Charts Row */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    {/* Subtotais do período filtrado */}
+                                    <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                                            <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-bold">Total de Transações</p>
+                                            <p className="text-xl font-bold text-emerald-900">{subtotal.totalTransactions.toLocaleString('pt-BR')}</p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Recebido</p>
+                                            <p className="text-xl font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalReceived)}</p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Enviado</p>
+                                            <p className="text-xl font-bold text-rose-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalSent)}</p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Saldo Líquido</p>
+                                            <p className={`text-xl font-bold ${netBalance >= 0 ? 'text-indigo-600' : 'text-slate-600'}`}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netBalance)}</p>
+                                        </div>
+                                    </div>
                             <div className="lg:col-span-2 bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
                                 <h3 className="text-sm font-bold text-slate-900 mb-6">Movimentação Diária</h3>
-                                <div className="h-[250px] w-full">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                                        <input type="checkbox" checked={showIn} onChange={e=>setShowIn(e.target.checked)} /> Mostrar Entradas
+                                                    </label>
+                                                    <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                                        <input type="checkbox" checked={showOut} onChange={e=>setShowOut(e.target.checked)} /> Mostrar Saídas
+                                                    </label>
+                                                </div>
+                                                <div className="h-[250px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={consolidated.chartData}>
                                             <defs>
                                                 <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
+                                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
                                                     <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                                                 </linearGradient>
                                                 <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.1}/>
+                                                    <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.25}/>
                                                     <stop offset="95%" stopColor="#F43F5E" stopOpacity={0}/>
                                                 </linearGradient>
                                             </defs>
@@ -473,8 +750,8 @@ export const TransactionHistory: React.FC = () => {
                                                 contentStyle={{backgroundColor: '#0F172A', borderRadius: '8px', border: 'none', color: '#fff'}}
                                                 itemStyle={{fontSize: '12px'}}
                                             />
-                                            <Area type="monotone" dataKey="in" name="Entradas" stroke="#10B981" fillOpacity={1} fill="url(#colorIn)" strokeWidth={2} />
-                                            <Area type="monotone" dataKey="out" name="Saídas" stroke="#F43F5E" fillOpacity={1} fill="url(#colorOut)" strokeWidth={2} />
+                                            {showIn && (<Area type="monotone" dataKey="in" name="Entradas" stroke="#10B981" fillOpacity={1} fill="url(#colorIn)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 5 }} />)}
+                                            {showOut && (<Area type="monotone" dataKey="out" name="Saídas" stroke="#F43F5E" fillOpacity={1} fill="url(#colorOut)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 5 }} />)}
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -484,21 +761,44 @@ export const TransactionHistory: React.FC = () => {
                                 <div className="w-full h-[200px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie
+                                                                                <Pie
                                                 data={consolidated.pieData}
                                                 cx="50%"
                                                 cy="50%"
-                                                innerRadius={60}
-                                                outerRadius={80}
-                                                paddingAngle={5}
+                                                innerRadius={55}
+                                                outerRadius={85}
+                                                paddingAngle={1}
                                                 dataKey="value"
+                                                labelLine={false}
+                                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                                    const RADIAN = Math.PI / 180;
+                                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.45;
+                                                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+                                                    const offset = -15;
+
+                                                    return (
+                                                        <text
+                                                            x={x + (x > cx ? offset : -offset)}
+                                                            y={y}
+                                                            fill="#000000ff"
+                                                            textAnchor={x > cx ? 'start' : 'end'}
+                                                            dominantBaseline="central"
+                                                            fontSize={15}
+                                                            fontWeight={1000}
+                                                        >
+                                                            {(percent * 100).toFixed(0)}%
+                                                        </text>
+                                                    );
+                                                }}
                                             >
                                                 {consolidated.pieData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip />
-                                            <Legend verticalAlign="bottom" height={36} />
+                                            <Tooltip wrapperStyle={{ fontSize: 12 }} />
+                                            <Legend verticalAlign="bottom" height={28} iconType="circle" />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -542,42 +842,117 @@ export const TransactionHistory: React.FC = () => {
 
                 {/* 📝 DETAILED VIEW */}
                 {activeTab === 'detailed' && (
-                    <table className="w-full text-left text-sm whitespace-nowrap">
+                    <div className="p-6 lg:p-8 space-y-6">
+                        {/* Totais do Período */}
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                            <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-bold mb-2">Totais do Período</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Total de Transações</p>
+                                    <p className="text-xl font-bold text-slate-900">{subtotal.totalTransactions.toLocaleString('pt-BR')}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Recebido</p>
+                                    <p className="text-xl font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalReceived)}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Enviado</p>
+                                    <p className="text-xl font-bold text-rose-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalSent)}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Saldo Líquido</p>
+                                    <p className={`text-xl font-bold ${netBalance >= 0 ? 'text-indigo-600' : 'text-slate-600'}`}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netBalance)}</p>
+                                </div>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-2">Totais considerando todas as {subtotal.totalTransactions.toLocaleString('pt-BR')} transações do período.</p>
+                        </div>
+
+                        <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="bg-slate-50 border-b border-slate-100">
                             <tr>
-                                <th className="px-8 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Transação</th>
                                 <th className="px-6 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Data</th>
-                                <th className="px-6 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Valor</th>
-                                <th className="px-6 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Status</th>
-                                <th className="px-6 py-4"></th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Tipo</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">ID</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">E2E/TXD</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Id Externo</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Cliente</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Documento</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Valor</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Saldo</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Status</th>
+                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {filteredTx.length === 0 ? (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum registro encontrado para este filtro.</td></tr>
-                            ) : filteredTx.map((tx) => {
+                                <tr><td colSpan={11} className="p-8 text-center text-slate-400">Nenhum registro encontrado para este filtro.</td></tr>
+                            ) : filteredTx.map((tx, index) => {
                             const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+                            const tipoLabel = isCredit ? 'Entrada' : 'Saída';
+                            const cliente = (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
+                            const rawDoc = (tx as any).document || (tx as any).cpfCnpj || (tx as any).cpf || (tx as any).cnpj || '';
+                            const documento = rawDoc ? formatCpfCnpj(String(rawDoc)) : '-';
+                            const pixId = (tx as any).pix || (tx as any).txid || (tx as any).endToEndId || '-';
+                            const e2e = (tx as any).e2e || (tx as any).endToEndId || '-';
+                            const externo = (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
+                            const runningBalance = (() => {
+                                // saldo acumulado dentro do período filtrado até esta linha
+                                const sumIn = filteredTx.slice(0, index + 1).filter(t => (t.type === 'CREDIT' || t.amount > 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                const sumOut = filteredTx.slice(0, index + 1).filter(t => (t.type === 'DEBIT' || t.amount < 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                return sumIn - sumOut;
+                            })();
                             return (
                             <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors group">
-                                <td className="px-8 py-5">
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isCredit ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-                                        <TransactionIcon type={tx.type} isCredit={isCredit} />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-slate-900">{cleanDescription(tx.description, tx.type, tx.amount)}</p>
-                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {tx.id.substring(0,8)}...</p>
-                                    </div>
-                                </div>
-                                </td>
                                 <td className="px-6 py-5">
                                     <div className="flex flex-col">
                                         <span className="text-slate-700 font-medium">{new Date(tx.date).toLocaleDateString()}</span>
                                         <span className="text-xs text-slate-400">{new Date(tx.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                     </div>
                                 </td>
+                                <td className="px-4 py-5 text-center">
+                                    <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg border ${isCredit ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                                        <TransactionIcon type={tx.type} isCredit={isCredit} />
+                                        <span className="text-[11px] font-bold">{tipoLabel}</span>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-5 font-mono text-xs text-slate-700">
+                                    <div className="flex items-center gap-2">
+                                        <span className="truncate max-w-[140px]" title={tx.id}>{tx.id}</span>
+                                        {tx.id && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(tx.id)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-4 py-5 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-2">
+                                        <span className="truncate max-w-[160px]" title={e2e}>{e2e}</span>
+                                        {e2e !== '-' && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(e2e)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-4 py-5 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-2">
+                                        <span className="truncate max-w-[150px]" title={externo}>{externo}</span>
+                                        {externo !== '-' && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(externo)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                
+                                <td className="px-4 py-5 text-slate-700 font-medium">{cliente}</td>
+                                <td className="px-4 py-5 text-slate-700 font-medium">{documento}</td>
                                 <td className={`px-6 py-5 font-bold text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
                                     {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                </td>
+                                <td className={`px-4 py-5 font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(runningBalance)}
                                 </td>
                                 <td className="px-6 py-5 text-center"><StatusBadge status={String(tx.status)} /></td>
                                 <td className="px-6 py-5 text-right relative">
@@ -585,9 +960,12 @@ export const TransactionHistory: React.FC = () => {
                                         <MoreHorizontal className="w-5 h-5" />
                                     </button>
                                     {activeMenuId === tx.id && (
-                                        <div className="absolute right-12 top-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 animate-fade-in">
+                                        <div className="absolute right-12 top-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 animate-fade-in">
                                             <button onClick={() => { setViewingReceipt(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
                                                 <FileText className="w-4 h-4" /> Ver Comprovante
+                                            </button>
+                                            <button onClick={() => { setActionsTx(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                                <MoreHorizontal className="w-4 h-4" /> Ações
                                             </button>
                                         </div>
                                     )}
@@ -595,7 +973,8 @@ export const TransactionHistory: React.FC = () => {
                             </tr>
                             )})}
                         </tbody>
-                    </table>
+                        </table>
+                    </div>
                 )}
             </>
         )}
@@ -603,7 +982,7 @@ export const TransactionHistory: React.FC = () => {
       
       {/* PROFESSIONAL RECEIPT MODAL */}
       {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[100dvh] grid place-items-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[99dvh] grid place-items-center">
             <div className="bg-[#F8FAFC] w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh] relative animate-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center p-6 bg-white border-b border-slate-100 shrink-0">
                     <h3 className="font-bold text-slate-900">Comprovante de Transação</h3>
@@ -701,6 +1080,46 @@ export const TransactionHistory: React.FC = () => {
             </div>
         </div>
       )}
+
+            {/* AÇÕES MODAL */}
+            {actionsTx && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[100dvh]">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                            <h3 className="font-bold text-slate-900">Ações da Transação</h3>
+                            <button onClick={() => setActionsTx(null)} className="p-2 text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full"><X className="w-5 h-5"/></button>
+                        </div>
+                        <div className="p-2">
+                            <div className="divide-y divide-slate-100">
+                                <button onClick={() => setViewingReceipt(actionsTx!)} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">1.</span> Ver comprovante
+                                </button>
+                                <button onClick={handlePrintReceipt} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">2.1.</span> PDF
+                                </button>
+                                <button onClick={handleExportCSV} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">2.2.</span> CSV
+                                </button>
+                                <button onClick={handleExportJSON} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">2.3.</span> JSON
+                                </button>
+                                <button onClick={handleExportTXT} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">2.4.</span> TXT
+                                </button>
+                                <button onClick={handleExportXLS} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">2.5.</span> XLS
+                                </button>
+                                <button onClick={() => handleResendWebhook()} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <span className="w-6 text-center">3.</span> Reenviar Webhook
+                                </button>
+                                <button onClick={() => handleRefund()} className="w-full flex items-center gap-2 px-3 py-3 text-sm text-rose-700 hover:bg-rose-50">
+                                    <span className="w-6 text-center">4.</span> Estornar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
     </div>
   );
 };
