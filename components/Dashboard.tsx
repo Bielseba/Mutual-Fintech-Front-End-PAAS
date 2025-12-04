@@ -37,6 +37,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
     const [showSummary, setShowSummary] = useState(true);
     const [showQuickActions, setShowQuickActions] = useState(true);
     const [comingSoon, setComingSoon] = useState<string | null>(null);
+    useEffect(() => {
+        if (!comingSoon) return;
+        const t = setTimeout(() => setComingSoon(null), 5000);
+        return () => clearTimeout(t);
+    }, [comingSoon]);
 
     const fetchData = async (initial: boolean = false) => {
         try {
@@ -208,7 +213,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                                                             if (soonKeys.includes(a.key)) {
                                                                 console.log('Coming soon clicked:', a.key, a.label);
                                                                 setComingSoon(a.label);
-                                                                try { alert(`${a.label} — em breve`); } catch {}
+                                                                // Do not navigate to avoid blank screen
                                                                 return;
                                                             }
                                                             if (a.key === 'transactions-consolidated') {
@@ -271,25 +276,13 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                         {comingSoon && (
                             <>
                                 <ComingSoonPortal title={comingSoon} onClose={() => setComingSoon(null)} />
-                                {/* Fallback inline banner in case portal is blocked */}
-                                <div className="fixed right-4 bottom-24" style={{ zIndex: 9998 }}>
-                                    <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-[320px] overflow-hidden">
-                                        <div className="p-3 border-b border-slate-100 flex items-center justify-between">
-                                            <h3 className="font-bold text-slate-900 text-sm">{comingSoon}</h3>
-                                            <button onClick={() => setComingSoon(null)} className="px-2 py-1 text-slate-500 hover:text-slate-900">Fechar</button>
-                                        </div>
-                                        <div className="p-4 text-center">
-                                            <p className="text-xs text-slate-600">Recurso em breve. Estamos finalizando esta funcionalidade.</p>
-                                        </div>
-                                    </div>
-                                </div>
                             </>
                         )}
         </div>
     );
 };
 
-// Simple "Em breve" modal
+
 export const ComingSoonPortal: React.FC<{ title: string, onClose: () => void }> = ({ title, onClose }) => {
     const node = (
         <div className="fixed right-4 bottom-4" style={{ zIndex: 9999 }}>
