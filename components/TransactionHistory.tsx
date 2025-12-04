@@ -677,7 +677,7 @@ export const TransactionHistory: React.FC = () => {
                     </div>
                 )}
                 </div>
-            </div> // <--- FIX HERE: Esta div de fechamento estava faltando
+            </div>
         )}
         </div>
 
