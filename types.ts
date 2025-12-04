@@ -23,6 +23,7 @@ export interface Transaction {
   type: TransactionType | string;
   sender?: string;     // If available
   recipient?: string;  // If available
+  balanceAfter?: number; // Wallet balance after this transaction, if provided
   // Legacy fields kept for compatibility if needed, but marked optional
   customerName?: string;
   pixKey?: string;

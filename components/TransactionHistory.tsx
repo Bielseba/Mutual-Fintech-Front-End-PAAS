@@ -925,9 +925,16 @@ export const TransactionHistory: React.FC = () => {
                             const e2e = (tx as any).e2e || (tx as any).endToEndId || '-';
                             const externo = (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
                             const runningBalance = (() => {
-                                // saldo acumulado dentro do período filtrado até esta linha
-                                const sumIn = filteredTx.slice(0, index + 1).filter(t => (t.type === 'CREDIT' || t.amount > 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0);
-                                const sumOut = filteredTx.slice(0, index + 1).filter(t => (t.type === 'DEBIT' || t.amount < 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                // Prefer balance provided by backend meta
+                                const balAfter = (tx as any).balanceAfter;
+                                if (typeof balAfter === 'number' && !isNaN(balAfter)) return Number(balAfter);
+                                // Fallback: saldo acumulado no período até esta linha (base 0)
+                                const sumIn = filteredTx.slice(0, index + 1)
+                                    .filter(t => (t.type === 'CREDIT' || t.amount > 0))
+                                    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                const sumOut = filteredTx.slice(0, index + 1)
+                                    .filter(t => (t.type === 'DEBIT' || t.amount < 0))
+                                    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
                                 return sumIn - sumOut;
                             })();
                             return (

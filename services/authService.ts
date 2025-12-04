@@ -363,18 +363,26 @@ export const authService = {
 
   _mapLedger(list: any[]): Transaction[] {
       return list.map((tx: any) => {
-        const amount = Number(tx.amount ?? tx.value ?? 0);
-        const direction = String(tx.direction ?? tx.type ?? (amount >= 0 ? 'CREDIT' : 'DEBIT')).toUpperCase();
+        const rawAmount = Number(tx.amount ?? tx.value ?? 0);
+        const direction = String(tx.direction ?? tx.type ?? (rawAmount >= 0 ? 'CREDIT' : 'DEBIT')).toUpperCase();
+        const amount = direction === 'DEBIT' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
         const created = tx.created_at || tx.createdAt || tx.date || new Date().toISOString();
+        const meta = tx.meta || {};
+        const balanceAfter = (typeof meta.newBalance === 'number')
+          ? Number(meta.newBalance)
+          : (typeof meta.previousBalance === 'number')
+            ? Number(meta.previousBalance) + amount
+            : undefined;
         return {
           id: tx.id || tx._id || 'TX-UNK',
-          amount: direction === 'DEBIT' ? -Math.abs(amount) : Math.abs(amount),
+          amount,
           date: created,
           description: tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito'),
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
           status: (tx.status || 'COMPLETED') as any,
           sender: tx.meta?.sender || tx.sender || undefined,
           recipient: tx.meta?.recipient || tx.recipient || undefined,
+          balanceAfter
         } as Transaction;
       });
   },
