@@ -9,22 +9,39 @@ import { Transaction, MedSummary } from '../types';
 
 // Helper for cleaning description (duplicated from TransactionHistory for isolation)
 const cleanDescription = (desc: string, type: string, amount: number) => {
-    if (!desc) return amount > 0 ? 'Depósito Pix' : 'Transferência Pix';
+    // Decide entrada/saída usando tipo/direção e sinal
+    const isDebit = String(type).toUpperCase() === 'DEBIT' || amount < 0;
+    const isCredit = String(type).toUpperCase() === 'CREDIT' || amount > 0;
+
+    if (!desc) return isDebit ? 'Saque Pix' : 'Depósito Pix';
+
+    // 1) Tentar interpretar JSON
     if (desc.trim().startsWith('{') || desc.trim().startsWith('[')) {
         try {
             const obj = JSON.parse(desc);
             if (obj.description) return obj.description;
             if (obj.reason) return obj.reason;
-            if (obj.type === 'PIX') return amount > 0 ? 'Recebimento Pix' : 'Envio Pix';
-        } catch (e) {}
+            if (obj.type === 'PIX') return isDebit ? 'Envio Pix' : 'Recebimento Pix';
+        } catch (e) { /* ignore parse errors */ }
     }
+
+    // 2) Palavras-chave conhecidas
     const lower = desc.toLowerCase();
-    if (lower.includes('starpago') || lower.includes('merorderno') || lower.includes('wd-')) return 'Saque Pix';
+    if (lower.includes('pix withdraw') || lower.includes('withdraw') || lower.includes('saque')) return 'Saque Pix';
+    if (lower.includes('pix deposit') || lower.includes('depósito') || lower.includes('deposit')) return 'Depósito Pix';
     if (lower.includes('pix sent') || lower.includes('envio pix')) return 'Envio Pix';
     if (lower.includes('pix received') || lower.includes('recebimento pix')) return 'Recebimento Pix';
-    if (lower.includes('depósito') || lower.includes('deposit')) return 'Depósito Pix';
-    if (lower.includes('withdraw') || lower.includes('saque')) return 'Saque Pix';
-    if (desc === 'Transação' || desc === 'Wallet Transfer' || desc.length > 50) return amount > 0 ? 'Depósito Pix' : 'Saque Pix';
+
+    // 3) Tokens técnicos de gateway → decidir pelo tipo/sinal
+    if (lower.includes('starpago') || lower.includes('merorderno') || lower.includes('wd-')) {
+        return isDebit ? 'Saque Pix' : 'Depósito Pix';
+    }
+
+    // 4) Genérico/técnico demais → decidir pelo tipo/sinal
+    if (desc === 'Transação' || desc === 'Wallet Transfer' || desc.length > 50) {
+        return isDebit ? 'Saque Pix' : 'Depósito Pix';
+    }
+
     return desc;
 };
 
