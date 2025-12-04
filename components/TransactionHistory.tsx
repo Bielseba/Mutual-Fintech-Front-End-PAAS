@@ -103,7 +103,9 @@ export const TransactionHistory: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-  const [viewingReceipt, setViewingReceipt] = useState<Transaction | null>(null);
+    const [viewingReceipt, setViewingReceipt] = useState<Transaction | null>(null);
+    const [modalTop, setModalTop] = useState<number | null>(null);
+    const [inlineReceiptId, setInlineReceiptId] = useState<string | null>(null);
   const [actionsTx, setActionsTx] = useState<Transaction | null>(null);
   const [showIn, setShowIn] = useState(true);
   const [showOut, setShowOut] = useState(true);
@@ -115,37 +117,36 @@ export const TransactionHistory: React.FC = () => {
   
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchTransactions();
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setActiveMenuId(null);
+    // Load transactions from API
+    const fetchTransactions = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const ledger = await authService.getWalletLedger();
+            setTransactions(Array.isArray(ledger) ? ledger : []);
+        } catch (err) {
+            setError('Falha ao carregar histórico.');
+        } finally {
+            setIsLoading(false);
+        }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
     useEffect(() => {
-        try {
-            const desired = localStorage.getItem('transactionsDefaultTab');
-            if (desired === 'consolidated' || desired === 'detailed') {
-                setActiveTab(desired as 'detailed' | 'consolidated');
-                localStorage.removeItem('transactionsDefaultTab');
-            }
-        } catch {}
+        fetchTransactions();
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setActiveMenuId(null);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-  const fetchTransactions = async () => {
-        setIsLoading(true);
-        try {
-            const user = authService.getUser();
-            if (user?.id) {
-                const ledger = await authService.getWalletLedger();
-                                // Ledger endpoint is already scoped to the logged-in user
-                                setTransactions(Array.isArray(ledger) ? ledger : []);
-            }
-        } catch (err) { setError('Falha ao carregar histórico.'); } 
-        finally { setIsLoading(false); }
-  };
+    // Set default tab from localStorage (if present)
+    useEffect(() => {
+        const desired = localStorage.getItem('transactionsDefaultTab');
+        if (desired === 'consolidated' || desired === 'detailed') {
+            setActiveTab(desired as 'detailed' | 'consolidated');
+        }
+    }, []);
 
   const handlePrintReceipt = () => {
     if (!viewingReceipt) return;
@@ -682,7 +683,7 @@ export const TransactionHistory: React.FC = () => {
         </div>
 
       {/* CONTENT AREA */}
-      <div className="flex-1 overflow-x-auto bg-white min-h-[400px]" ref={menuRef}>
+      <div className="flex-1 overflow-x-auto bg-white min-h-[1px]" ref={menuRef}>
         {isLoading ? (
             <div className="h-64 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
         ) : (
@@ -873,8 +874,8 @@ export const TransactionHistory: React.FC = () => {
                 {activeTab === 'detailed' && (
                     <div className="p-6 lg:p-8 space-y-6">
                         {/* Totais do Período */}
-                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                            <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-bold mb-2">Totais do Período</p>
+                        <div className="rounded-2xl border border-black-100 bg-gray-50 p-4">
+                            <p className="text-[11px] uppercase tracking-wide text-black-800 font-bold mb-">Totais do Período</p>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div className="p-4 rounded-xl bg-white border border-slate-200">
                                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Total de Transações</p>
@@ -896,20 +897,114 @@ export const TransactionHistory: React.FC = () => {
                             <p className="text-[11px] text-slate-500 mt-2">Totais considerando todas as {subtotal.totalTransactions.toLocaleString('pt-BR')} transações do período.</p>
                         </div>
 
-                        <table className="w-full text-left text-sm whitespace-nowrap">
+                        {/* Mobile card list */}
+                        <div className="sm:hidden space-y-3">
+                            {filteredTx.length === 0 ? (
+                                <div className="p-4 text-center text-slate-400">Nenhum registro encontrado para este filtro.</div>
+                            ) : filteredTx.map((tx, index) => {
+                                const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+                                const tipoLabel = isCredit ? 'Entrada' : 'Saída';
+                                const clienteFull = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
+                                const cliente = (() => {
+                                    if (!clienteFull || clienteFull === '-') return '-';
+                                    const parts = String(clienteFull).trim().split(/\s+/);
+                                    return parts.slice(0, 2).join(' ');
+                                })();
+                                const rawDoc = (tx as any).document || (tx as any).cpfCnpj || (tx as any).cpf || (tx as any).cnpj || '';
+                                const docDigits = String(rawDoc).replace(/\D/g, '');
+                                const shortDoc = docDigits.length >= 11 ? docDigits.slice(3, 9) : docDigits;
+                                const documento = rawDoc ? `***.${shortDoc}.***` : '-';
+                                const e2e = tx.e2e || (tx as any).e2e || (tx as any).endToEndId || '-';
+                                const externo = (tx as any).providerOrderNo || (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
+                                const shortE2E = e2e !== '-' ? String(e2e).slice(0, 10) : '-';
+                                const shortExterno = externo !== '-' ? String(externo).slice(0, 10) : '-';
+                                const runningBalance = (() => {
+                                    const balAfter = (tx as any).balanceAfter;
+                                    if (typeof balAfter === 'number' && !isNaN(balAfter)) return Number(balAfter);
+                                    const sumIn = filteredTx.slice(0, index + 1)
+                                        .filter(t => (t.type === 'CREDIT' || t.amount > 0))
+                                        .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                    const sumOut = filteredTx.slice(0, index + 1)
+                                        .filter(t => (t.type === 'DEBIT' || t.amount < 0))
+                                        .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                    return sumIn - sumOut;
+                                })();
+                                return (
+                                                                        <div
+                                                                            key={tx.id}
+                                                                            className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm cursor-pointer"
+                                                                            onClick={(e) => {
+                                                                                const target = e.currentTarget as HTMLElement;
+                                                                                const rect = target.getBoundingClientRect();
+                                                                                const offset = 190; // larger offset so modal appears clearly below click
+                                                                                let top = rect.top + window.scrollY + offset;
+                                                                                const marginBottom = 24;
+                                                                                const maxTop = window.scrollY + (window.innerHeight - marginBottom - 300); // ensure modal header remains in viewport
+                                                                                if (top > maxTop) top = maxTop;
+                                                                                setViewingReceipt(tx);
+                                                                                setModalTop(top);
+                                                                            }}
+                                                                        >
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div>
+                                                <p className="text-slate-700 font-bold text-sm">{new Date(tx.date).toLocaleDateString()}</p>
+                                                <p className="text-[11px] text-slate-400">{new Date(tx.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                            </div>
+                                            <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg border ${isCredit ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                                                <TransactionIcon type={tx.type} isCredit={isCredit} />
+                                                <span className="text-[11px] font-bold">{tipoLabel}</span>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-[12px]">
+                                            <div className="text-slate-500"><span className="font-bold">E2E:</span> <span className="break-all" title={e2e}>{shortE2E}</span></div>
+                                            <div className="text-slate-500"><span className="font-bold">Cliente:</span> <span className="break-all" title={clienteFull}>{cliente}</span></div>
+                                            <div className="text-slate-500"><span className="font-bold">Externo:</span> <span className="break-all" title={externo}>{shortExterno}</span></div>
+                                            <div className="text-slate-500"><span className="font-bold">Documento:</span> {documento}</div>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-2 gap-2 items-center">
+                                            <div className={`text-[13px] font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                            </div>
+                                            <div className={`text-[13px] font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(runningBalance)}
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 flex justify-between items-center">
+                                            <StatusBadge status={String(tx.status)} />
+                                            <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === tx.id ? null : tx.id); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+                                                <MoreHorizontal className="w-5 h-5" />
+                                            </button>
+                                            {activeMenuId === tx.id && (
+                                                <div className="absolute right-4 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 animate-fade-in">
+                                                    <button onClick={() => { setViewingReceipt(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                                        <FileText className="w-4 h-4" /> Ver Comprovante
+                                                    </button>
+                                                    <button onClick={() => { setActionsTx(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                                        <MoreHorizontal className="w-4 h-4" /> Ações
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Desktop/Tablet table */}
+                        <table className="hidden sm:table w-full text-left text-sm whitespace-nowrap table-fixed">
                         <thead className="bg-slate-50 border-b border-slate-100">
                             <tr>
-                                <th className="px-6 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Data</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Tipo</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">ID</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">E2E/TXD</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Id Externo</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Cliente</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Documento</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Valor</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Saldo</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Status</th>
-                                <th className="px-4 py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Ações</th>
+                                <th className="px-3 sm:px-6 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Data</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Tipo</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">E2E/TXD</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">ID</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">Id Externo</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Cliente</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">Documento</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Valor</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-right">Saldo</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Status</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -918,7 +1013,12 @@ export const TransactionHistory: React.FC = () => {
                             ) : filteredTx.map((tx, index) => {
                             const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
                             const tipoLabel = isCredit ? 'Entrada' : 'Saída';
-                            const cliente = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
+                            const clienteFull = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
+                            const cliente = (() => {
+                                if (!clienteFull || clienteFull === '-') return '-';
+                                const parts = String(clienteFull).trim().split(/\s+/);
+                                return parts.slice(0, 2).join(' ');
+                            })();
                             const rawDoc = (tx as any).document || (tx as any).cpfCnpj || (tx as any).cpf || (tx as any).cnpj || '';
                             const docDigits = String(rawDoc).replace(/\D/g, '');
                             const shortDoc = docDigits.length >= 11 ? docDigits.slice(3, 9) : docDigits; // Normalize: full CPF -> middle 6 digits
@@ -926,6 +1026,8 @@ export const TransactionHistory: React.FC = () => {
                             const pixId = (tx as any).pix || (tx as any).txid || (tx as any).endToEndId || '-';
                             const e2e = tx.e2e || (tx as any).e2e || (tx as any).endToEndId || '-';
                             const externo = (tx as any).providerOrderNo || (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
+                            const shortE2E = e2e !== '-' ? String(e2e).slice(0, 10) : '-';
+                            const shortExterno = externo !== '-' ? String(externo).slice(0, 10) : '-';
                             const runningBalance = (() => {
                                 // Prefer balance provided by backend meta
                                 const balAfter = (tx as any).balanceAfter;
@@ -947,25 +1049,15 @@ export const TransactionHistory: React.FC = () => {
                                         <span className="text-xs text-slate-400">{new Date(tx.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                     </div>
                                 </td>
-                                <td className="px-4 py-5 text-center">
+                                <td className="px-2 sm:px-4 py-3 sm:py-5 text-center">
                                     <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg border ${isCredit ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
                                         <TransactionIcon type={tx.type} isCredit={isCredit} />
                                         <span className="text-[11px] font-bold">{tipoLabel}</span>
                                     </div>
                                 </td>
-                                <td className="px-4 py-5 font-mono text-xs text-slate-700">
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-500">
                                     <div className="flex items-center gap-2">
-                                        <span className="truncate max-w-[140px]" title={tx.id}>{tx.id}</span>
-                                        {tx.id && (
-                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(tx.id)}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-4 py-5 font-mono text-xs text-slate-500">
-                                    <div className="flex items-center gap-2">
-                                        <span className="truncate max-w-[160px]" title={e2e}>{e2e}</span>
+                                        <span className="break-all sm:truncate sm:max-w-[100px]" title={e2e}>{shortE2E}</span>
                                         {e2e !== '-' && (
                                             <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(e2e)}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -973,9 +1065,19 @@ export const TransactionHistory: React.FC = () => {
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-4 py-5 font-mono text-xs text-slate-500">
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-700 hidden sm:table-cell">
                                     <div className="flex items-center gap-2">
-                                        <span className="truncate max-w-[150px]" title={externo}>{externo}</span>
+                                        <span className="truncate max-w-[120px]" title={tx.id}>{tx.id}</span>
+                                        {tx.id && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(tx.id)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-500 hidden sm:table-cell">
+                                    <div className="flex items-center gap-2">
+                                        <span className="break-all sm:truncate sm:max-w-[120px]" title={externo}>{shortExterno}</span>
                                         {externo !== '-' && (
                                             <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(externo)}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -984,17 +1086,26 @@ export const TransactionHistory: React.FC = () => {
                                     </div>
                                 </td>
                                 
-                                <td className="px-4 py-5 text-slate-700 font-medium">{cliente}</td>
-                                <td className="px-4 py-5 text-slate-700 font-medium">{documento}</td>
-                                <td className={`px-6 py-5 font-bold text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 text-slate-700 font-medium">
+                                    <div className="flex items-center gap-2">
+                                        <span className="break-all sm:truncate sm:max-w-[180px]" title={clienteFull}>{cliente}</span>
+                                        {clienteFull !== '-' && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(clienteFull)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 text-slate-700 font-medium hidden sm:table-cell">{documento}</td>
+                                <td className={`px-2 sm:px-4 py-3 sm:py-4 font-bold text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
                                     {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
                                 </td>
-                                <td className={`px-4 py-5 font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                <td className={`px-2 sm:px-3 py-3 sm:py-4 font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(runningBalance)}
                                 </td>
-                                <td className="px-6 py-5 text-center"><StatusBadge status={String(tx.status)} /></td>
-                                <td className="px-6 py-5 text-right relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === tx.id ? null : tx.id); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100">
+                                <td className="px-3 sm:px-6 py-3 sm:py-5 text-center"><StatusBadge status={String(tx.status)} /></td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-5 text-right relative">
+                                    <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === tx.id ? null : tx.id); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100">
                                         <MoreHorizontal className="w-5 h-5" />
                                     </button>
                                     {activeMenuId === tx.id && (
@@ -1019,12 +1130,15 @@ export const TransactionHistory: React.FC = () => {
       </div>
       
       {/* PROFESSIONAL RECEIPT MODAL */}
-      {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[99dvh] grid place-items-center">
-            <div className="bg-[#F8FAFC] w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh] relative animate-in zoom-in-95 duration-200">
+            {viewingReceipt && (
+                <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 sm:p-6 bg-transparent animate-fade-in h-[99dvh]">
+                        <div
+                            className="bg-[#F8FAFC] w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200"
+                            style={modalTop !== null ? { position: 'fixed', top: `${modalTop}px`, left: '50%', transform: 'translateX(-50%)' } : {}}
+                        >
                 <div className="flex justify-between items-center p-6 bg-white border-b border-slate-100 shrink-0">
                     <h3 className="font-bold text-slate-900">Comprovante de Transação</h3>
-                    <button onClick={() => setViewingReceipt(null)} className="p-2 text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                    <button onClick={() => { setViewingReceipt(null); setModalTop(null); }} className="p-2 text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#F8FAFC]">
@@ -1091,6 +1205,52 @@ export const TransactionHistory: React.FC = () => {
                                         {viewingReceipt.id}
                                     </p>
                                 </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">E2E/TXD</span>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-900 break-all">{(viewingReceipt as any).e2e || (viewingReceipt as any).endToEndId || '-'}</p>
+                                            {((viewingReceipt as any).e2e || (viewingReceipt as any).endToEndId) && (
+                                                <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(((viewingReceipt as any).e2e || (viewingReceipt as any).endToEndId))}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Id Externo</span>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-900 break-all">{(viewingReceipt as any).providerOrderNo || (viewingReceipt as any).externalId || (viewingReceipt as any).referenceId || (viewingReceipt as any).external || '-'}</p>
+                                            {((viewingReceipt as any).providerOrderNo || (viewingReceipt as any).externalId || (viewingReceipt as any).referenceId || (viewingReceipt as any).external) && (
+                                                <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(((viewingReceipt as any).providerOrderNo || (viewingReceipt as any).externalId || (viewingReceipt as any).referenceId || (viewingReceipt as any).external))}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Cliente</span>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-900 break-all">{(viewingReceipt as any).payerName || (viewingReceipt as any).clientName || (viewingReceipt as any).customer || viewingReceipt.recipient || viewingReceipt.sender || '-'}</p>
+                                            {((viewingReceipt as any).payerName || (viewingReceipt as any).clientName || (viewingReceipt as any).customer || viewingReceipt.recipient || viewingReceipt.sender) && (
+                                                <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(((viewingReceipt as any).payerName || (viewingReceipt as any).clientName || (viewingReceipt as any).customer || viewingReceipt.recipient || viewingReceipt.sender))}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Documento</span>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-900 break-all">{(viewingReceipt as any).document || (viewingReceipt as any).cpfCnpj || (viewingReceipt as any).cpf || (viewingReceipt as any).cnpj || '-'}</p>
+                                            {((viewingReceipt as any).document || (viewingReceipt as any).cpfCnpj || (viewingReceipt as any).cpf || (viewingReceipt as any).cnpj) && (
+                                                <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(((viewingReceipt as any).document || (viewingReceipt as any).cpfCnpj || (viewingReceipt as any).cpf || (viewingReceipt as any).cnpj))}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                                 
                                 <div>
                                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Autenticação (Hash)</span>
@@ -1121,8 +1281,8 @@ export const TransactionHistory: React.FC = () => {
 
             {/* AÇÕES MODAL */}
             {actionsTx && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in h-[100dvh]">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 sm:p-6 bg-transparent animate-fade-in h-[100dvh]">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" style={modalTop !== null ? { position: 'fixed', top: `${modalTop}px`, left: '50%', transform: 'translateX(-50%)' } : {}}>
                         <div className="flex justify-between items-center p-4 border-b border-slate-100">
                             <h3 className="font-bold text-slate-900">Ações da Transação</h3>
                             <button onClick={() => setActionsTx(null)} className="p-2 text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full"><X className="w-5 h-5"/></button>
