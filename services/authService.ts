@@ -414,7 +414,7 @@ export const authService = {
           // Prefer true E2E-like identifiers
           e2e = meta.tradeNo || meta.trade_no || meta.txid || meta.endToEndId || meta.end_to_end_id || meta.e2e || meta.txd || tx.txid || tx.endToEndId || tx.end_to_end_id || tx.e2e || tx.txd || undefined;
         }
-        // Do not fallback to providerOrderNo/orderNo; require true trade/E2E identifiers
+        // Do not fallback to providerOrderNo/orderNo; require true trade/E2E identifierss
         // Last resort: try to read from description if it embeds IDs
         if (!e2e && typeof tx.description === 'string') {
           const d = tx.description;
