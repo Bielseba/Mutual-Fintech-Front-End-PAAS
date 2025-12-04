@@ -996,8 +996,8 @@ export const TransactionHistory: React.FC = () => {
                             <tr>
                                 <th className="px-3 sm:px-6 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Data</th>
                                 <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider text-center">Tipo</th>
-                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">E2E/TXD</th>
                                 <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">ID</th>
+                                <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">E2E/TXD</th>
                                 <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">Id Externo</th>
                                 <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Cliente</th>
                                 <th className="px-2 sm:px-4 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider hidden sm:table-cell">Documento</th>
@@ -1055,21 +1055,21 @@ export const TransactionHistory: React.FC = () => {
                                         <span className="text-[11px] font-bold">{tipoLabel}</span>
                                     </div>
                                 </td>
-                                <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-500">
-                                    <div className="flex items-center gap-2">
-                                        <span className="break-all sm:truncate sm:max-w-[100px]" title={e2e}>{shortE2E}</span>
-                                        {e2e !== '-' && (
-                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(e2e)}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
                                 <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-700 hidden sm:table-cell">
                                     <div className="flex items-center gap-2">
                                         <span className="truncate max-w-[120px]" title={tx.id}>{tx.id}</span>
                                         {tx.id && (
                                             <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(tx.id)}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-2">
+                                        <span className="break-all sm:truncate sm:max-w-[100px]" title={e2e}>{shortE2E}</span>
+                                        {e2e !== '-' && (
+                                            <button className="text-slate-400 hover:text-indigo-600" title="Copiar" onClick={()=>copyToClipboard(e2e)}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                             </button>
                                         )}
