@@ -55,6 +55,10 @@ export interface UserFees {
   userId: number;
   pixInPercent: number;
   pixOutPercent: number;
+  pixInFeeType?: 'PERCENT' | 'FIXED';
+  pixInFeeValue?: number;
+  pixOutFeeType?: 'PERCENT' | 'FIXED';
+  pixOutFeeValue?: number;
 }
 
 export interface User {
