@@ -495,10 +495,21 @@ export const TransactionHistory: React.FC = () => {
 
   const filteredTx = getFilteredTransactions();
   const consolidated = getConsolidatedData();
+    const isDebitTx = (t: Transaction) => {
+        const status = String((t as any).status || '').toLowerCase();
+        const type = String((t as any).type || '').toLowerCase();
+        const desc = String((t as any).description || '').toLowerCase();
+        const withdrawFlag = status.includes('withdraw') || type.includes('withdraw') || desc.includes('withdraw');
+        const paidFlag = status.includes('paid') || status.includes('completed');
+        if (withdrawFlag && paidFlag) return true;
+        return t.type === 'DEBIT' || t.amount < 0;
+    };
+    const isCreditTx = (t: Transaction) => t.type === 'CREDIT' || t.amount > 0;
+
     const subtotal = {
         totalTransactions: filteredTx.length,
-        totalReceived: filteredTx.filter(t => (t.type === 'CREDIT' || t.amount > 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0),
-        totalSent: filteredTx.filter(t => (t.type === 'DEBIT' || t.amount < 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0),
+        totalReceived: filteredTx.filter(isCreditTx).reduce((acc, t) => acc + Math.abs(t.amount), 0),
+        totalSent: filteredTx.filter(isDebitTx).reduce((acc, t) => acc + Math.abs(t.amount), 0),
     };
     const netBalance = subtotal.totalReceived - subtotal.totalSent;
 

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, CartesianGrid, YAxis } from 'recharts';
 import { Wallet, ArrowUpRight, ArrowDownLeft, ShieldAlert, Loader2, QrCode, Landmark, CalendarDays, Building2, Undo2, Star, Search, Receipt, BarChart2, Users, ShieldCheck, Bitcoin, ClipboardList } from 'lucide-react';
 import { authService } from '../services/authService';
@@ -35,6 +36,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
     const [refreshing, setRefreshing] = useState(false);
     const [showSummary, setShowSummary] = useState(true);
     const [showQuickActions, setShowQuickActions] = useState(true);
+    const [comingSoon, setComingSoon] = useState<string | null>(null);
 
     const fetchData = async (initial: boolean = false) => {
         try {
@@ -78,9 +80,23 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
     return data;
   }, [transactions]);
 
-  // Calculate totals
-  const income = transactions.filter(t => t.type === 'CREDIT' || (t.type !== 'DEBIT' && t.amount > 0)).reduce((acc, t) => acc + t.amount, 0);
-  const expenses = transactions.filter(t => t.type === 'DEBIT' || (t.type !== 'CREDIT' && t.amount < 0)).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    // Calculate totals
+    const isDebit = (t: Transaction) => {
+        const status = String((t as any).status || '').toLowerCase();
+        const type = String((t as any).type || '').toLowerCase();
+        const desc = String((t as any).description || '').toLowerCase();
+        const withdrawFlag = status.includes('withdraw') || type.includes('withdraw') || desc.includes('withdraw');
+        const paidFlag = status.includes('paid') || status.includes('completed');
+        if (withdrawFlag && paidFlag) return true;
+        return t.type === 'DEBIT' || t.amount < 0;
+    };
+
+    const isCredit = (t: Transaction) => {
+        return t.type === 'CREDIT' || t.amount > 0;
+    };
+
+    const income = transactions.filter(isCredit).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const expenses = transactions.filter(isDebit).reduce((acc, t) => acc + Math.abs(t.amount), 0);
 
   if (isLoading) return <div className="flex h-96 items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
 
@@ -173,13 +189,12 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 </div>
                 {showQuickActions && (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                      {[ 
+                                            {[ 
                           {key:'pix', label:'Enviar Pix', icon: QrCode},
                           {key:'withdraw', label:'Receber Pix', icon: QrCode},
                           {key:'pix-copy-paste', label:'Pix Copia e Cola', icon: ClipboardList},
                           {key:'pix-refund', label:'Estornar Pix', icon: Undo2},
                           {key:'pix-favorites', label:'Pix Favorecido', icon: Star},
-                          {key:'search-transactions', label:'Buscar Transações', icon: Search},
                           {key:'transactions', label:'Extrato Detalhado', icon: Receipt},
                           {key:'transactions-consolidated', label:'Extrato Consolidado', icon: BarChart2},
                           {key:'favorites', label:'Favorecidos', icon: Users},
@@ -189,7 +204,14 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                           <button
                             key={a.key}
                             onClick={() => {
-                              if (a.key === 'transactions-consolidated') {
+                                                            const soonKeys = ['pix-copy-paste','pix-refund','pix-favorites','favorites','authorizations'];
+                                                            if (soonKeys.includes(a.key)) {
+                                                                console.log('Coming soon clicked:', a.key, a.label);
+                                                                setComingSoon(a.label);
+                                                                try { alert(`${a.label} — em breve`); } catch {}
+                                                                return;
+                                                            }
+                                                            if (a.key === 'transactions-consolidated') {
                                 try { localStorage.setItem('transactionsDefaultTab', 'consolidated'); } catch {}
                                 onNavigate('transactions');
                               } else {
@@ -245,6 +267,42 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                     </table>
                 </div>
             </div>
+
+                        {comingSoon && (
+                            <>
+                                <ComingSoonPortal title={comingSoon} onClose={() => setComingSoon(null)} />
+                                {/* Fallback inline banner in case portal is blocked */}
+                                <div className="fixed right-4 bottom-24" style={{ zIndex: 9998 }}>
+                                    <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-[320px] overflow-hidden">
+                                        <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                                            <h3 className="font-bold text-slate-900 text-sm">{comingSoon}</h3>
+                                            <button onClick={() => setComingSoon(null)} className="px-2 py-1 text-slate-500 hover:text-slate-900">Fechar</button>
+                                        </div>
+                                        <div className="p-4 text-center">
+                                            <p className="text-xs text-slate-600">Recurso em breve. Estamos finalizando esta funcionalidade.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
         </div>
     );
+};
+
+// Simple "Em breve" modal
+export const ComingSoonPortal: React.FC<{ title: string, onClose: () => void }> = ({ title, onClose }) => {
+    const node = (
+        <div className="fixed right-4 bottom-4" style={{ zIndex: 9999 }}>
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-[320px] overflow-hidden" role="dialog" aria-live="polite">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-900">{title}</h3>
+                    <button onClick={onClose} className="px-2 py-1 text-slate-500 hover:text-slate-900">Fechar</button>
+                </div>
+                <div className="p-6 text-center">
+                    <p className="text-sm text-slate-600">Recurso em breve. Estamos finalizando esta funcionalidade.</p>
+                </div>
+            </div>
+        </div>
+    );
+    return ReactDOM.createPortal(node, document.body);
 };
