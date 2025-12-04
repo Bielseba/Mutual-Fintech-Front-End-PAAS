@@ -32,29 +32,36 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [medSummary, setMedSummary] = useState<MedSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [showSummary, setShowSummary] = useState(true);
+    const [showQuickActions, setShowQuickActions] = useState(true);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const user = authService.getUser();
-        if (user?.id) {
-            const [bal, ledger, med] = await Promise.all([
-                authService.getWalletBalance(user.id),
-                authService.getWalletLedger(),
-                adminService.getMedSummary()
-            ]);
-            setBalance(bal);
-            setTransactions(ledger);
-            setMedSummary(med);
+    const fetchData = async (initial: boolean = false) => {
+        try {
+            if (initial) setIsLoading(true);
+            setRefreshing(true);
+            const user = authService.getUser();
+            if (user?.id) {
+                const [bal, ledger, med] = await Promise.all([
+                    authService.getWalletBalance(user.id),
+                    authService.getWalletLedger(),
+                    adminService.getMedSummary()
+                ]);
+                setBalance(bal);
+                setTransactions(ledger);
+                setMedSummary(med);
+            }
+        } catch (error) {
+            console.error("Dashboard load error", error);
+        } finally {
+            if (initial) setIsLoading(false);
+            setRefreshing(false);
         }
-      } catch (error) {
-        console.error("Dashboard load error", error);
-      } finally {
-        setIsLoading(false);
-      }
     };
-    loadData();
-  }, []);
+
+    useEffect(() => {
+        fetchData(true);
+    }, []);
 
   // Calculate Chart Data (Last 7 days)
   const chartData = React.useMemo(() => {
@@ -83,10 +90,13 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
             <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-slate-900">Resumo Financeiro</h2>
                 <div className="flex gap-2">
-                    <button onClick={() => onNavigate('refresh')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">Atualizar</button>
-                    <button onClick={() => onNavigate('hide-summary')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">Ocultar</button>
+                    <button onClick={() => fetchData()} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold flex items-center gap-2">
+                      {refreshing && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Atualizar
+                    </button>
+                    <button onClick={() => setShowSummary(s => !s)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">{showSummary ? 'Ocultar' : 'Mostrar'}</button>
                 </div>
             </div>
+            {showSummary && (
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
@@ -145,6 +155,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                     <p className="text-xs text-slate-400 mt-2">Total no sistema</p>
                 </div>
             </div>
+            )}
 
             {/* Acessos Rápidos */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
@@ -154,32 +165,47 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                         <p className="text-xs text-slate-400">Funcionalidades mais utilizadas</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => onNavigate('refresh')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">Atualizar</button>
-                        <button onClick={() => onNavigate('hide-quick-actions')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">Ocultar</button>
+                        <button onClick={() => fetchData()} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold flex items-center gap-2">
+                          {refreshing && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Atualizar
+                        </button>
+                        <button onClick={() => setShowQuickActions(v => !v)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">{showQuickActions ? 'Ocultar' : 'Mostrar'}</button>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    {[ 
-                        {key:'pix', label:'Enviar Pix', icon: QrCode},
-                        {key:'withdraw', label:'Receber Pix', icon: QrCode},
-                        {key:'pix-copy-paste', label:'Pix Copia e Cola', icon: ClipboardList},
-                        {key:'pix-refund', label:'Estornar Pix', icon: Undo2},
-                        {key:'pix-favorites', label:'Pix Favorecido', icon: Star},
-                        {key:'search-transactions', label:'Buscar Transações', icon: Search},
-                        {key:'transactions', label:'Extrato Detalhado', icon: Receipt},
-                        {key:'transactions-consolidated', label:'Extrato Consolidado', icon: BarChart2},
-                        {key:'favorites', label:'Favorecidos', icon: Users},
-                        {key:'authorizations', label:'Autorizações', icon: ShieldCheck},
-                        {key:'crypto', label:'Converter Criptomoedas', icon: Bitcoin},
-                    ].map((a) => (
-                        <button key={a.key} onClick={() => onNavigate(a.key)} className="p-4 bg-white rounded-xl border border-slate-200 text-center hover:bg-slate-50 transition-colors">
-                            <div className="mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
-                                {a.icon && <a.icon className="w-5 h-5 text-slate-500" />}
-                            </div>
-                            <span className="text-sm font-medium text-slate-700">{a.label}</span>
-                        </button>
-                    ))}
-                </div>
+                {showQuickActions && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      {[ 
+                          {key:'pix', label:'Enviar Pix', icon: QrCode},
+                          {key:'withdraw', label:'Receber Pix', icon: QrCode},
+                          {key:'pix-copy-paste', label:'Pix Copia e Cola', icon: ClipboardList},
+                          {key:'pix-refund', label:'Estornar Pix', icon: Undo2},
+                          {key:'pix-favorites', label:'Pix Favorecido', icon: Star},
+                          {key:'search-transactions', label:'Buscar Transações', icon: Search},
+                          {key:'transactions', label:'Extrato Detalhado', icon: Receipt},
+                          {key:'transactions-consolidated', label:'Extrato Consolidado', icon: BarChart2},
+                          {key:'favorites', label:'Favorecidos', icon: Users},
+                          {key:'authorizations', label:'Autorizações', icon: ShieldCheck},
+                          {key:'crypto', label:'Converter Criptomoedas', icon: Bitcoin},
+                      ].map((a) => (
+                          <button
+                            key={a.key}
+                            onClick={() => {
+                              if (a.key === 'transactions-consolidated') {
+                                try { localStorage.setItem('transactionsDefaultTab', 'consolidated'); } catch {}
+                                onNavigate('transactions');
+                              } else {
+                                onNavigate(a.key);
+                              }
+                            }}
+                            className="p-4 bg-white rounded-xl border border-slate-200 text-center hover:bg-slate-50 transition-colors"
+                          >
+                              <div className="mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                                  {a.icon && <a.icon className="w-5 h-5 text-slate-500" />}
+                              </div>
+                              <span className="text-sm font-medium text-slate-700">{a.label}</span>
+                          </button>
+                      ))}
+                  </div>
+                )}
             </div>
 
             {/* Recent Transactions */}

@@ -124,6 +124,16 @@ export const TransactionHistory: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+    useEffect(() => {
+        try {
+            const desired = localStorage.getItem('transactionsDefaultTab');
+            if (desired === 'consolidated' || desired === 'detailed') {
+                setActiveTab(desired as 'detailed' | 'consolidated');
+                localStorage.removeItem('transactionsDefaultTab');
+            }
+        } catch {}
+    }, []);
+
   const fetchTransactions = async () => {
         setIsLoading(true);
         try {
