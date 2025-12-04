@@ -405,6 +405,8 @@ export const authService = {
           recipient: tx.meta?.recipient || tx.recipient || undefined,
           e2e,
           document: tx.meta?.document || tx.document || undefined,
+          payerName: tx.meta?.payer_name || tx.meta?.payerName || tx.payer_name || tx.payerName || undefined,
+          providerOrderNo: tx.meta?.providerOrderNo || tx.providerOrderNo || undefined,
           balanceAfter
         } as Transaction;
       });

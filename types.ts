@@ -25,6 +25,9 @@ export interface Transaction {
   recipient?: string;  // If available
   balanceAfter?: number; // Wallet balance after this transaction, if provided
   e2e?: string; // End-to-end ID (e.g., PIX tradeNo)
+  document?: string; // Raw document from ledger/meta
+  payerName?: string; // PIX payer name from meta
+  providerOrderNo?: string; // Provider external id
   // Legacy fields kept for compatibility if needed, but marked optional
   customerName?: string;
   pixKey?: string;

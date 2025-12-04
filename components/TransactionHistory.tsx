@@ -918,14 +918,14 @@ export const TransactionHistory: React.FC = () => {
                             ) : filteredTx.map((tx, index) => {
                             const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
                             const tipoLabel = isCredit ? 'Entrada' : 'Saída';
-                            const cliente = (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
+                            const cliente = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
                             const rawDoc = (tx as any).document || (tx as any).cpfCnpj || (tx as any).cpf || (tx as any).cnpj || '';
                             const docDigits = String(rawDoc).replace(/\D/g, '');
                             const shortDoc = docDigits.length >= 11 ? docDigits.slice(3, 9) : docDigits; // Normalize: full CPF -> middle 6 digits
                             const documento = rawDoc ? `***.${shortDoc}.***` : '-';
                             const pixId = (tx as any).pix || (tx as any).txid || (tx as any).endToEndId || '-';
                             const e2e = tx.e2e || (tx as any).e2e || (tx as any).endToEndId || '-';
-                            const externo = (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
+                            const externo = (tx as any).providerOrderNo || (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
                             const runningBalance = (() => {
                                 // Prefer balance provided by backend meta
                                 const balAfter = (tx as any).balanceAfter;
