@@ -345,11 +345,7 @@ export const authService = {
       }
       // Prefer PIX/gateway operations, but fallback to full list if none
       const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
-        // Normalize meta: sometimes APIs return it as a JSON string
-        let meta: any = tx.meta || {};
-        if (typeof meta === 'string') {
-          try { meta = JSON.parse(meta); } catch { meta = { raw: meta }; }
-        }
+        const meta = tx.meta || {};
         const provider = String(meta.provider || '').toUpperCase();
         const mtype = String(meta.type || '').toUpperCase();
         const desc = String(tx.description || '').toUpperCase();
@@ -372,70 +368,32 @@ export const authService = {
         const amount = direction === 'DEBIT' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
         const created = tx.created_at || tx.createdAt || tx.date || new Date().toISOString();
         const meta = tx.meta || {};
-        // Extract E2E/TXD/tradeNo from various sources
+        // Extract E2E/tradeNo from raw_response if present
         let e2e: string | undefined = undefined;
-        const rawResp = meta.raw_response || meta.rawResponse || meta.gatewayResponse || meta.gateway_response || meta.response || tx.raw_response || tx.rawResponse || tx.response || (meta.transaction && (meta.transaction.raw_response || meta.transaction.rawResponse));
+        const rawResp = meta.raw_response || meta.rawResponse || tx.raw_response || tx.rawResponse;
         if (rawResp) {
           try {
             const obj = typeof rawResp === 'string' ? JSON.parse(rawResp) : rawResp;
-            // Strict priority: tradeNo from gateway response
-            e2e = obj.tradeNo || obj.trade_no || obj.txid || obj.endToEndId || obj.end_to_end_id || obj.e2e || obj.txd || undefined;
-            // If still missing, check nested common containers
-            if (!e2e && obj.data && typeof obj.data === 'object') {
-              const d = obj.data;
-              e2e = d.tradeNo || d.trade_no || d.txid || d.endToEndId || d.end_to_end_id || d.e2e || d.txd || e2e;
-            }
+            e2e = obj.tradeNo || obj.txid || obj.endToEndId || obj.orderNo || undefined;
           } catch {
             // Non-JSON string: try regex extraction for tradeNo/txid/endToEndId
             if (typeof rawResp === 'string') {
               const s = rawResp;
-              const mTrade = s.match(/"?(tradeNo|trade_no)"?\s*[:=]\s*"?([A-Za-z0-9_-]+)"?/i);
-              const mTxid = s.match(/"?(txid|endToEndId|end_to_end_id|E2E|TXD)"?\s*[:=]\s*"?([A-Za-z0-9_-]+)"?/i);
-              e2e = (mTrade && mTrade[2]) || (mTxid && mTxid[2]) || undefined;
+              const mTrade = s.match(/"?tradeNo"?\s*[:=]\s*"?([A-Za-z0-9_-]+)"?/i);
+              const mTxid = s.match(/"?(txid|endToEndId)"?\s*[:=]\s*"?([A-Za-z0-9_-]+)"?/i);
+              e2e = (mTrade && mTrade[1]) || (mTxid && mTxid[2]) || undefined;
             }
           }
         }
-        // Final fallback: search entire meta JSON for tradeNo signature
-        if (!e2e) {
-          try {
-            const metaStr = JSON.stringify(meta);
-            const m = metaStr.match(/"?(tradeNo|trade_no)"?\s*[:=]\s*"?([A-Za-z0-9_-]+)"?/i);
-            if (m) e2e = m[2];
-          } catch {}
-        }
-        // Debug aid: log when rawResp exists but e2e not found
-        if (!e2e && rawResp) {
-          try {
-            console.warn('E2E not found; raw_response sample:', typeof rawResp === 'string' ? rawResp.slice(0, 180) : JSON.stringify(rawResp).slice(0, 180));
-          } catch {}
-        }
         // Fallbacks
         if (!e2e) {
-          // Prefer true E2E-like identifiers
-          e2e = meta.tradeNo || meta.trade_no || meta.txid || meta.endToEndId || meta.end_to_end_id || meta.e2e || meta.txd || tx.txid || tx.endToEndId || tx.end_to_end_id || tx.e2e || tx.txd || undefined;
+          e2e = meta.tradeNo || meta.txid || meta.endToEndId || meta.orderNo || tx.txid || tx.endToEndId || tx.orderNo || undefined;
         }
-        // Do not fallback to providerOrderNo/orderNo; require true trade/E2E identifiers
-        // Last resort: try to read from description if it embeds IDs
-        if (!e2e && typeof tx.description === 'string') {
-          const d = tx.description;
-          const m = d.match(/\b([A-Z]{2,3}-[0-9A-Za-z_-]{6,})\b/) // e.g., WD-202312031805
-                  || d.match(/\bE2E[:\s]?([0-9A-Za-z_-]{6,})\b/i)
-                  || d.match(/\bTXD[:\s]?([0-9A-Za-z_-]{6,})\b/i);
-          e2e = (m && (m[1] || m[0])) || undefined;
-        }
-
-        // External/reference identifiers for display
-        const externalId = tx.externalId || tx.referenceId || tx.external || meta.referenceId || meta.externalId || meta.orderNo || undefined;
         const balanceAfter = (typeof meta.newBalance === 'number')
           ? Number(meta.newBalance)
           : (typeof meta.previousBalance === 'number')
             ? Number(meta.previousBalance) + amount
             : undefined;
-        // Coerce to string if present
-        if (e2e && typeof e2e !== 'string') {
-          try { e2e = String(e2e); } catch {}
-        }
-
         return {
           id: tx.id || tx._id || 'TX-UNK',
           amount,
@@ -446,9 +404,8 @@ export const authService = {
           sender: tx.meta?.sender || tx.sender || undefined,
           recipient: tx.meta?.recipient || tx.recipient || undefined,
           e2e,
-          balanceAfter,
-          // Include common external/reference id so UI can show it
-          externalId
+          document: tx.meta?.document || tx.document || undefined,
+          balanceAfter
         } as Transaction;
       });
   },
