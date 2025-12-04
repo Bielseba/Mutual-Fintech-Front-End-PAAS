@@ -922,7 +922,7 @@ export const TransactionHistory: React.FC = () => {
                             const rawDoc = (tx as any).document || (tx as any).cpfCnpj || (tx as any).cpf || (tx as any).cnpj || '';
                             const documento = rawDoc ? formatCpfCnpj(String(rawDoc)) : '-';
                             const pixId = (tx as any).pix || (tx as any).txid || (tx as any).endToEndId || '-';
-                            const e2e = (tx as any).e2e || (tx as any).endToEndId || '-';
+                            const e2e = tx.e2e || (tx as any).e2e || (tx as any).endToEndId || '-';
                             const externo = (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
                             const runningBalance = (() => {
                                 // Prefer balance provided by backend meta

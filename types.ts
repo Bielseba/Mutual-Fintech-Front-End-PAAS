@@ -24,6 +24,7 @@ export interface Transaction {
   sender?: string;     // If available
   recipient?: string;  // If available
   balanceAfter?: number; // Wallet balance after this transaction, if provided
+  e2e?: string; // End-to-end ID (e.g., PIX tradeNo)
   // Legacy fields kept for compatibility if needed, but marked optional
   customerName?: string;
   pixKey?: string;
