@@ -312,16 +312,49 @@ export const authService = {
                 headers: headers as any
             });
             if (fallbackResponse.ok) {
-                const json = await fallbackResponse.json();
-                const list = json.ledger || json.data || [];
-                return this._mapLedger(list);
+          const json = await fallbackResponse.json();
+          const walletId = json.walletId || json.wallet_id;
+          let list = Array.isArray(json.ledger)
+            ? json.ledger
+            : (Array.isArray(json.data) ? json.data : []);
+          if (walletId && Array.isArray(list)) {
+            list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
+          }
+          const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
+            const meta = tx.meta || {};
+            const provider = String(meta.provider || '').toUpperCase();
+            const mtype = String(meta.type || '').toUpperCase();
+            const desc = String(tx.description || '').toUpperCase();
+            const isGateway = provider === 'GATEWAY';
+            const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
+            return isGateway || isPix;
+          }) : list;
+          const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
+          return this._mapLedger(finalList);
             }
             throw new Error("Falha ao buscar extrato");
         }
         
-        const json = await response.json();
-        const list = json.ledger || json.data || [];
-        return this._mapLedger(list);
+      const json = await response.json();
+      const walletId = json.walletId || json.wallet_id;
+      let list = Array.isArray(json.ledger)
+        ? json.ledger
+        : (Array.isArray(json.data) ? json.data : []);
+      if (walletId && Array.isArray(list)) {
+        list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
+      }
+      // Prefer PIX/gateway operations, but fallback to full list if none
+      const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
+        const meta = tx.meta || {};
+        const provider = String(meta.provider || '').toUpperCase();
+        const mtype = String(meta.type || '').toUpperCase();
+        const desc = String(tx.description || '').toUpperCase();
+        const isGateway = provider === 'GATEWAY';
+        const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
+        return isGateway || isPix;
+      }) : list;
+      const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
+      return this._mapLedger(finalList);
     } catch (e) {
         console.error("Erro getWalletLedger:", e);
         return [];
@@ -329,16 +362,21 @@ export const authService = {
   },
 
   _mapLedger(list: any[]): Transaction[] {
-      return list.map((tx: any) => ({
-        id: tx.id || tx._id || 'TX-UNK',
-        amount: Number(tx.amount || tx.value || 0),
-        date: tx.created_at || new Date().toISOString(),
-        description: tx.description || 'Transação',
-        type: (tx.amount > 0 || tx.type === 'CREDIT') ? 'CREDIT' : 'DEBIT',
-        status: tx.status || 'COMPLETED',
-        sender: tx.sender,
-        recipient: tx.recipient
-    }));
+      return list.map((tx: any) => {
+        const amount = Number(tx.amount ?? tx.value ?? 0);
+        const direction = String(tx.direction ?? tx.type ?? (amount >= 0 ? 'CREDIT' : 'DEBIT')).toUpperCase();
+        const created = tx.created_at || tx.createdAt || tx.date || new Date().toISOString();
+        return {
+          id: tx.id || tx._id || 'TX-UNK',
+          amount: direction === 'DEBIT' ? -Math.abs(amount) : Math.abs(amount),
+          date: created,
+          description: tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito'),
+          type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
+          status: (tx.status || 'COMPLETED') as any,
+          sender: tx.meta?.sender || tx.sender || undefined,
+          recipient: tx.meta?.recipient || tx.recipient || undefined,
+        } as Transaction;
+      });
   },
 
   // PIX IN (Depósito) - CORRIGIDO PARA LER json.pix.qrcode

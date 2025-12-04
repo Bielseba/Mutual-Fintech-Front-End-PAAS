@@ -140,7 +140,8 @@ export const TransactionHistory: React.FC = () => {
             const user = authService.getUser();
             if (user?.id) {
                 const ledger = await authService.getWalletLedger();
-                setTransactions(ledger);
+                                // Ledger endpoint is already scoped to the logged-in user
+                                setTransactions(Array.isArray(ledger) ? ledger : []);
             }
         } catch (err) { setError('Falha ao carregar histórico.'); } 
         finally { setIsLoading(false); }
@@ -499,12 +500,19 @@ export const TransactionHistory: React.FC = () => {
         const status = String((t as any).status || '').toLowerCase();
         const type = String((t as any).type || '').toLowerCase();
         const desc = String((t as any).description || '').toLowerCase();
+        if (type === 'debit') return true;
+        if (type === 'credit') return false;
         const withdrawFlag = status.includes('withdraw') || type.includes('withdraw') || desc.includes('withdraw');
         const paidFlag = status.includes('paid') || status.includes('completed');
         if (withdrawFlag && paidFlag) return true;
-        return t.type === 'DEBIT' || t.amount < 0;
+        return Number(t.amount) < 0;
     };
-    const isCreditTx = (t: Transaction) => t.type === 'CREDIT' || t.amount > 0;
+    const isCreditTx = (t: Transaction) => {
+        const type = String((t as any).type || '').toLowerCase();
+        if (type === 'credit') return true;
+        if (type === 'debit') return false;
+        return Number(t.amount) > 0;
+    };
 
     const subtotal = {
         totalTransactions: filteredTx.length,

@@ -55,7 +55,8 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                     adminService.getMedSummary()
                 ]);
                 setBalance(bal);
-                setTransactions(ledger);
+                // Ledger is already user-scoped by API; do not over-filter here
+                setTransactions(Array.isArray(ledger) ? ledger : []);
                 setMedSummary(med);
             }
         } catch (error) {
@@ -90,14 +91,22 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
         const status = String((t as any).status || '').toLowerCase();
         const type = String((t as any).type || '').toLowerCase();
         const desc = String((t as any).description || '').toLowerCase();
+        // Prefer explicit type if present
+        if (type === 'debit') return true;
+        if (type === 'credit') return false;
+        // Withdrawals count as debit when completed/paid
         const withdrawFlag = status.includes('withdraw') || type.includes('withdraw') || desc.includes('withdraw');
         const paidFlag = status.includes('paid') || status.includes('completed');
         if (withdrawFlag && paidFlag) return true;
-        return t.type === 'DEBIT' || t.amount < 0;
+        // Fallback to amount sign
+        return Number(t.amount) < 0;
     };
 
     const isCredit = (t: Transaction) => {
-        return t.type === 'CREDIT' || t.amount > 0;
+        const type = String((t as any).type || '').toLowerCase();
+        if (type === 'credit') return true;
+        if (type === 'debit') return false;
+        return Number(t.amount) > 0;
     };
 
     const income = transactions.filter(isCredit).reduce((acc, t) => acc + Math.abs(t.amount), 0);
