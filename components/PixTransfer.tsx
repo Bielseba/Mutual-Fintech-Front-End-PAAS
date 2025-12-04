@@ -34,6 +34,22 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
     description: '',
   });
 
+  // Reset completo ao trocar entre Depósito (pix) e Saque (withdraw)
+  useEffect(() => {
+    setStep(1);
+    setError(null);
+    setIsLoading(false);
+    setPixResult(null);
+    setWithdrawResult(null);
+    setCopied(false);
+    setFormData({
+      pixKey: '',
+      pixKeyType: 'CPF',
+      amount: '',
+      description: '',
+    });
+  }, [mode]);
+
   // Fetch balance on mount for validation - DEPENDENCY FIXED
   useEffect(() => {
     const fetchBalance = async () => {
