@@ -12,31 +12,39 @@ export const FeesPage: React.FC = () => {
   useEffect(() => {
     const fetchFees = async () => {
       try {
+        console.log('[FeesPage] === INICIANDO BUSCA DE TAXAS ===');
         setIsLoading(true);
         setError(null);
         const data = await authService.getMyFees();
+        console.log('[FeesPage] Dados retornados do serviço:', data);
         
         if (data) {
+          console.log('[FeesPage] ✅ Taxas encontradas, atualizando estado:', data);
           setFees(data);
         } else {
+          console.warn('[FeesPage] ⚠️ Nenhuma taxa retornada, usando valores padrão');
           // Se não houver taxas configuradas, usar valores padrão de 0
           const user = authService.getUser();
-          setFees({
+          const defaultFees = {
             userId: user?.id ? Number(user.id) : 0,
             pixInPercent: 0,
             pixOutPercent: 0
-          });
+          };
+          console.log('[FeesPage] Valores padrão definidos:', defaultFees);
+          setFees(defaultFees);
         }
       } catch (e) {
-        console.error('[FeesPage] Erro ao buscar taxas:', e);
+        console.error('[FeesPage] ❌ Erro ao buscar taxas:', e);
         setError('Erro ao carregar taxas. Tente novamente mais tarde.');
         // Em caso de erro, usar valores padrão
         const user = authService.getUser();
-        setFees({
+        const errorFees = {
           userId: user?.id ? Number(user.id) : 0,
           pixInPercent: 0,
           pixOutPercent: 0
-        });
+        };
+        console.log('[FeesPage] Valores padrão por erro:', errorFees);
+        setFees(errorFees);
       } finally {
         setIsLoading(false);
       }
