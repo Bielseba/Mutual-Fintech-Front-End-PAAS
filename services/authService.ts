@@ -590,13 +590,37 @@ export const authService = {
       try {
           const headers = this.getBasicHeaders();
           const res = await fetch(`${API_URL}/me/fees`, { headers: headers as any });
+          
+          if (!res.ok) {
+              console.error('[getMyFees] Erro HTTP:', res.status, res.statusText);
+              return null;
+          }
+          
           const json = await res.json();
-          return json.data ? { 
-              userId: json.data.userId, 
-              pixInPercent: Number(json.data.pixInPercent), 
-              pixOutPercent: Number(json.data.pixOutPercent) 
-          } : null;
-      } catch { return null; }
+          
+          if (json.ok && json.data) {
+              return { 
+                  userId: json.data.userId, 
+                  pixInPercent: Number(json.data.pixInPercent) || 0, 
+                  pixOutPercent: Number(json.data.pixOutPercent) || 0 
+              };
+          }
+          
+          // Fallback: tentar ler diretamente se não estiver em json.data
+          if (json.pixInPercent !== undefined || json.pixOutPercent !== undefined) {
+              return {
+                  userId: json.userId || null,
+                  pixInPercent: Number(json.pixInPercent) || 0,
+                  pixOutPercent: Number(json.pixOutPercent) || 0
+              };
+          }
+          
+          console.warn('[getMyFees] Formato de resposta inesperado:', json);
+          return null;
+      } catch (error) {
+          console.error('[getMyFees] Erro na requisição:', error);
+          return null;
+      }
   },
 
   logout() {

@@ -7,14 +7,36 @@ import { UserFees } from '../types';
 export const FeesPage: React.FC = () => {
   const [fees, setFees] = useState<UserFees | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchFees = async () => {
       try {
+        setIsLoading(true);
+        setError(null);
         const data = await authService.getMyFees();
-        setFees(data);
+        
+        if (data) {
+          setFees(data);
+        } else {
+          // Se não houver taxas configuradas, usar valores padrão de 0
+          const user = authService.getUser();
+          setFees({
+            userId: user?.id ? Number(user.id) : 0,
+            pixInPercent: 0,
+            pixOutPercent: 0
+          });
+        }
       } catch (e) {
-        console.error(e);
+        console.error('[FeesPage] Erro ao buscar taxas:', e);
+        setError('Erro ao carregar taxas. Tente novamente mais tarde.');
+        // Em caso de erro, usar valores padrão
+        const user = authService.getUser();
+        setFees({
+          userId: user?.id ? Number(user.id) : 0,
+          pixInPercent: 0,
+          pixOutPercent: 0
+        });
       } finally {
         setIsLoading(false);
       }
@@ -48,6 +70,13 @@ export const FeesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Main Pricing Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {/* Pix In */}
@@ -63,7 +92,7 @@ export const FeesPage: React.FC = () => {
                   ) : (
                     <>
                         <span className="text-4xl font-bold text-slate-900">
-                            {fees?.pixInPercent ? fees.pixInPercent.toFixed(2) : '0.00'}%
+                            {(fees?.pixInPercent ?? 0).toFixed(2)}%
                         </span>
                     </>
                   )}
@@ -83,7 +112,7 @@ export const FeesPage: React.FC = () => {
                   ) : (
                     <>
                         <span className="text-4xl font-bold text-slate-900">
-                            {fees?.pixOutPercent ? fees.pixOutPercent.toFixed(2) : '0.00'}%
+                            {(fees?.pixOutPercent ?? 0).toFixed(2)}%
                         </span>
                     </>
                   )}
