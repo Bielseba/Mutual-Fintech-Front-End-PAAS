@@ -542,15 +542,67 @@ export const authService = {
 
   async getMyFees(): Promise<UserFees | null> {
       try {
+          console.log('[getMyFees] === INÍCIO FRONTEND ===');
+          const token = this.getToken();
+          const user = this.getUser();
+          console.log('[getMyFees] Token presente?', !!token);
+          console.log('[getMyFees] User do localStorage:', user);
+          
           const headers = this.getBasicHeaders();
-          const res = await fetch(`${API_URL}/me/fees`, { headers: headers as any });
+          console.log('[getMyFees] Headers preparados:', {
+              authorization: headers.Authorization ? 'Bearer ***' : 'ausente',
+              app_id: headers.app_id || 'ausente',
+              client_id: headers.client_id || 'ausente'
+          });
+          
+          const url = `${API_URL}/me/fees`;
+          console.log('[getMyFees] URL da requisição:', url);
+          
+          const res = await fetch(url, { headers: headers as any });
+          console.log('[getMyFees] Status da resposta:', res.status, res.statusText);
+          console.log('[getMyFees] Headers da resposta:', Object.fromEntries(res.headers.entries()));
+          
+          if (!res.ok) {
+              const errorText = await res.text();
+              console.error('[getMyFees] ❌ Erro HTTP:', res.status, res.statusText);
+              console.error('[getMyFees] Corpo da resposta de erro:', errorText);
+              return null;
+          }
+          
           const json = await res.json();
-          return json.data ? { 
-              userId: json.data.userId, 
-              pixInPercent: Number(json.data.pixInPercent), 
-              pixOutPercent: Number(json.data.pixOutPercent) 
-          } : null;
-      } catch { return null; }
+          console.log('[getMyFees] Resposta JSON completa:', JSON.stringify(json, null, 2));
+          
+          if (json.ok && json.data) {
+              const result = { 
+                  userId: json.data.userId, 
+                  pixInPercent: Number(json.data.pixInPercent) || 0, 
+                  pixOutPercent: Number(json.data.pixOutPercent) || 0 
+              };
+              console.log('[getMyFees] ✅ Dados parseados:', result);
+              return result;
+          }
+          
+          // Fallback: tentar ler diretamente se não estiver em json.data
+          if (json.pixInPercent !== undefined || json.pixOutPercent !== undefined) {
+              const result = {
+                  userId: json.userId || null,
+                  pixInPercent: Number(json.pixInPercent) || 0,
+                  pixOutPercent: Number(json.pixOutPercent) || 0
+              };
+              console.log('[getMyFees] ✅ Dados parseados (fallback):', result);
+              return result;
+          }
+          
+          console.warn('[getMyFees] ⚠️ Formato de resposta inesperado:', json);
+          return null;
+      } catch (error) {
+          console.error('[getMyFees] ❌ Erro na requisição:', error);
+          if (error instanceof Error) {
+              console.error('[getMyFees] Mensagem de erro:', error.message);
+              console.error('[getMyFees] Stack:', error.stack);
+          }
+          return null;
+      }
   },
 
   logout() {
