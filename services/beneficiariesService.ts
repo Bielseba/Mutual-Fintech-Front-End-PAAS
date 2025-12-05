@@ -25,7 +25,11 @@ async function parseJsonSafe(res: Response) {
 }
 
 export async function listBeneficiaries(): Promise<Beneficiary[]> {
-  const res = await fetch(`${API_BASE}/api/beneficiaries`, { credentials: 'include' })
+  const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
+  const res = await fetch(`${API_BASE}/api/beneficiaries`, {
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
   if (!res.ok) throw new Error('Falha ao listar favorecidos')
   return parseJsonSafe(res)
 }
@@ -37,9 +41,10 @@ export async function createBeneficiary(payload: {
   pix_key: string
   key_type?: string
 }): Promise<Beneficiary> {
+  const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
   const res = await fetch(`${API_BASE}/api/beneficiaries`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     credentials: 'include',
     body: JSON.stringify(payload),
   })
@@ -48,8 +53,10 @@ export async function createBeneficiary(payload: {
 }
 
 export async function removeBeneficiary(id: number): Promise<{ success: boolean }> {
+  const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
   const res = await fetch(`${API_BASE}/api/beneficiaries/${id}`, {
     method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     credentials: 'include',
   })
   if (!res.ok) throw new Error('Falha ao remover favorecido')
