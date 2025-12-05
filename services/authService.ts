@@ -320,17 +320,8 @@ export const authService = {
           if (walletId && Array.isArray(list)) {
             list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
           }
-          const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
-            const meta = tx.meta || {};
-            const provider = String(meta.provider || '').toUpperCase();
-            const mtype = String(meta.type || '').toUpperCase();
-            const desc = String(tx.description || '').toUpperCase();
-            const isGateway = provider === 'GATEWAY';
-            const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
-            return isGateway || isPix;
-          }) : list;
-          const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
-          return this._mapLedger(finalList);
+          // Retornar TODAS as transações, não filtrar apenas PIX
+          return this._mapLedger(list);
             }
             throw new Error("Falha ao buscar extrato");
         }
@@ -343,18 +334,9 @@ export const authService = {
       if (walletId && Array.isArray(list)) {
         list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
       }
-      // Prefer PIX/gateway operations, but fallback to full list if none
-      const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
-        const meta = tx.meta || {};
-        const provider = String(meta.provider || '').toUpperCase();
-        const mtype = String(meta.type || '').toUpperCase();
-        const desc = String(tx.description || '').toUpperCase();
-        const isGateway = provider === 'GATEWAY';
-        const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
-        return isGateway || isPix;
-      }) : list;
-      const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
-      return this._mapLedger(finalList);
+      // Retornar TODAS as transações, não filtrar apenas PIX
+      // O filtro estava escondendo transações importantes
+      return this._mapLedger(list);
     } catch (e) {
         console.error("Erro getWalletLedger:", e);
         return [];
