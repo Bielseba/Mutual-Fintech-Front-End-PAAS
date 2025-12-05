@@ -376,11 +376,30 @@ export const authService = {
           : (typeof meta.previousBalance === 'number')
             ? Number(meta.previousBalance) + amount
             : undefined;
+        // Formatar descrição baseado no tipo de transação
+        let formattedDescription = tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito');
+        
+        // Se for taxa de transação, manter a descrição original
+        if (meta.feeType === 'TRANSACTION_FEE' || /Taxa de transação/i.test(formattedDescription)) {
+          formattedDescription = 'Taxa de transação';
+        }
+        // Formatar depósitos e saques
+        else if (/PIX DEPOSIT|Depósito Pix|Depósito STARPAGO/i.test(formattedDescription)) {
+          formattedDescription = 'Depósito Pix';
+        }
+        else if (/PIX WITHDRAW|PIX OUT|Saque Pix|Saque STARPAGO/i.test(formattedDescription)) {
+          // Remover informações de taxa da descrição principal
+          formattedDescription = formattedDescription.replace(/\s*\+\s*Taxa:.*$/i, '').trim();
+          if (!formattedDescription || formattedDescription === 'PIX OUT') {
+            formattedDescription = 'Saque Pix';
+          }
+        }
+        
         return {
           id: tx.id || tx._id || 'TX-UNK',
           amount,
           date: created,
-          description: tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito'),
+          description: formattedDescription,
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
           status: (tx.status || 'COMPLETED') as any,
           sender: tx.meta?.sender || tx.sender || undefined,
