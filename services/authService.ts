@@ -578,7 +578,11 @@ export const authService = {
               const result = { 
                   userId: json.data.userId, 
                   pixInPercent: Number(json.data.pixInPercent) || 0, 
-                  pixOutPercent: Number(json.data.pixOutPercent) || 0 
+                  pixOutPercent: Number(json.data.pixOutPercent) || 0,
+                  pixInFeeType: json.data.pixInFeeType || 'PERCENT',
+                  pixInFeeValue: Number(json.data.pixInFeeValue) || 0,
+                  pixOutFeeType: json.data.pixOutFeeType || 'PERCENT',
+                  pixOutFeeValue: Number(json.data.pixOutFeeValue) || 0
               };
               console.log('[getMyFees] ✅ Dados parseados:', result);
               return result;
@@ -589,7 +593,11 @@ export const authService = {
               const result = {
                   userId: json.userId || null,
                   pixInPercent: Number(json.pixInPercent) || 0,
-                  pixOutPercent: Number(json.pixOutPercent) || 0
+                  pixOutPercent: Number(json.pixOutPercent) || 0,
+                  pixInFeeType: json.pixInFeeType || 'PERCENT',
+                  pixInFeeValue: Number(json.pixInFeeValue) || 0,
+                  pixOutFeeType: json.pixOutFeeType || 'PERCENT',
+                  pixOutFeeValue: Number(json.pixOutFeeValue) || 0
               };
               console.log('[getMyFees] ✅ Dados parseados (fallback):', result);
               return result;
