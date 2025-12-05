@@ -320,17 +320,8 @@ export const authService = {
           if (walletId && Array.isArray(list)) {
             list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
           }
-          const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
-            const meta = tx.meta || {};
-            const provider = String(meta.provider || '').toUpperCase();
-            const mtype = String(meta.type || '').toUpperCase();
-            const desc = String(tx.description || '').toUpperCase();
-            const isGateway = provider === 'GATEWAY';
-            const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
-            return isGateway || isPix;
-          }) : list;
-          const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
-          return this._mapLedger(finalList);
+          // Retornar TODAS as transações, não filtrar apenas PIX
+          return this._mapLedger(list);
             }
             throw new Error("Falha ao buscar extrato");
         }
@@ -343,18 +334,9 @@ export const authService = {
       if (walletId && Array.isArray(list)) {
         list = list.filter((tx: any) => (tx.wallet_id ?? tx.walletId) === walletId);
       }
-      // Prefer PIX/gateway operations, but fallback to full list if none
-      const pixOnly = Array.isArray(list) ? list.filter((tx: any) => {
-        const meta = tx.meta || {};
-        const provider = String(meta.provider || '').toUpperCase();
-        const mtype = String(meta.type || '').toUpperCase();
-        const desc = String(tx.description || '').toUpperCase();
-        const isGateway = provider === 'GATEWAY';
-        const isPix = mtype.startsWith('PIX_') || desc.includes('PIX');
-        return isGateway || isPix;
-      }) : list;
-      const finalList = (Array.isArray(pixOnly) && pixOnly.length > 0) ? pixOnly : list;
-      return this._mapLedger(finalList);
+      // Retornar TODAS as transações, não filtrar apenas PIX
+      // O filtro estava escondendo transações importantes
+      return this._mapLedger(list);
     } catch (e) {
         console.error("Erro getWalletLedger:", e);
         return [];
@@ -394,11 +376,30 @@ export const authService = {
           : (typeof meta.previousBalance === 'number')
             ? Number(meta.previousBalance) + amount
             : undefined;
+        // Formatar descrição baseado no tipo de transação
+        let formattedDescription = tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito');
+        
+        // Se for taxa de transação, manter a descrição original
+        if (meta.feeType === 'TRANSACTION_FEE' || /Taxa de transação/i.test(formattedDescription)) {
+          formattedDescription = 'Taxa de transação';
+        }
+        // Formatar depósitos e saques
+        else if (/PIX DEPOSIT|Depósito Pix|Depósito STARPAGO/i.test(formattedDescription)) {
+          formattedDescription = 'Depósito Pix';
+        }
+        else if (/PIX WITHDRAW|PIX OUT|Saque Pix|Saque STARPAGO/i.test(formattedDescription)) {
+          // Remover informações de taxa da descrição principal
+          formattedDescription = formattedDescription.replace(/\s*\+\s*Taxa:.*$/i, '').trim();
+          if (!formattedDescription || formattedDescription === 'PIX OUT') {
+            formattedDescription = 'Saque Pix';
+          }
+        }
+        
         return {
           id: tx.id || tx._id || 'TX-UNK',
           amount,
           date: created,
-          description: tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito'),
+          description: formattedDescription,
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
           status: (tx.status || 'COMPLETED') as any,
           sender: tx.meta?.sender || tx.sender || undefined,
@@ -504,12 +505,13 @@ export const authService = {
       else apiType = 'evp';
 
       // 4. Montar Payload conforme documentação StarPago
+      // bankCode é obrigatório e é o mesmo que keyType na API StarPago
       const payload = {
           userId: userId,
           amount: amount,
           key: pixKey,
           keyType: apiType,
-          bankCode: apiType 
+          bankCode: apiType // bankCode é o mesmo que keyType na StarPago
       };
       
       console.log("Enviando Saque Payload:", payload);
@@ -522,7 +524,23 @@ export const authService = {
       
       const json = await response.json();
       if (!response.ok) {
-          const errorMsg = json.message || json.error || "Erro ao processar saque";
+          // Mensagem mais clara baseada no tipo de erro
+          let errorMsg = json.message || json.error || "Erro ao processar saque";
+          
+          // Se for erro do gateway (502), mensagem mais amigável
+          if (response.status === 502 || json.error === 'GatewayPixWithdrawFailed') {
+              errorMsg = json.message || "O serviço de pagamento está temporariamente indisponível. Tente novamente em alguns instantes.";
+          }
+          
+          // Se for erro de validação ou saldo insuficiente
+          if (response.status === 400) {
+              if (json.error === 'InsufficientFunds' || json.details?.message?.includes('Saldo insuficiente')) {
+                  errorMsg = json.details?.message || "Saldo insuficiente para realizar o saque.";
+              } else {
+                  errorMsg = json.message || json.error || "Dados inválidos. Verifique as informações e tente novamente.";
+              }
+          }
+          
           throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
       
@@ -578,7 +596,11 @@ export const authService = {
               const result = { 
                   userId: json.data.userId, 
                   pixInPercent: Number(json.data.pixInPercent) || 0, 
-                  pixOutPercent: Number(json.data.pixOutPercent) || 0 
+                  pixOutPercent: Number(json.data.pixOutPercent) || 0,
+                  pixInFeeType: json.data.pixInFeeType || 'PERCENT',
+                  pixInFeeValue: Number(json.data.pixInFeeValue) || 0,
+                  pixOutFeeType: json.data.pixOutFeeType || 'PERCENT',
+                  pixOutFeeValue: Number(json.data.pixOutFeeValue) || 0
               };
               console.log('[getMyFees] ✅ Dados parseados:', result);
               return result;
@@ -589,7 +611,11 @@ export const authService = {
               const result = {
                   userId: json.userId || null,
                   pixInPercent: Number(json.pixInPercent) || 0,
-                  pixOutPercent: Number(json.pixOutPercent) || 0
+                  pixOutPercent: Number(json.pixOutPercent) || 0,
+                  pixInFeeType: json.pixInFeeType || 'PERCENT',
+                  pixInFeeValue: Number(json.pixInFeeValue) || 0,
+                  pixOutFeeType: json.pixOutFeeType || 'PERCENT',
+                  pixOutFeeValue: Number(json.pixOutFeeValue) || 0
               };
               console.log('[getMyFees] ✅ Dados parseados (fallback):', result);
               return result;

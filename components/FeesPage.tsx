@@ -25,10 +25,14 @@ export const FeesPage: React.FC = () => {
           console.warn('[FeesPage] ⚠️ Nenhuma taxa retornada, usando valores padrão');
           // Se não houver taxas configuradas, usar valores padrão de 0
           const user = authService.getUser();
-          const defaultFees = {
+          const defaultFees: UserFees = {
             userId: user?.id ? Number(user.id) : 0,
             pixInPercent: 0,
-            pixOutPercent: 0
+            pixOutPercent: 0,
+            pixInFeeType: 'PERCENT',
+            pixInFeeValue: 0,
+            pixOutFeeType: 'PERCENT',
+            pixOutFeeValue: 0
           };
           console.log('[FeesPage] Valores padrão definidos:', defaultFees);
           setFees(defaultFees);
@@ -38,10 +42,14 @@ export const FeesPage: React.FC = () => {
         setError('Erro ao carregar taxas. Tente novamente mais tarde.');
         // Em caso de erro, usar valores padrão
         const user = authService.getUser();
-        const errorFees = {
+        const errorFees: UserFees = {
           userId: user?.id ? Number(user.id) : 0,
           pixInPercent: 0,
-          pixOutPercent: 0
+          pixOutPercent: 0,
+          pixInFeeType: 'PERCENT',
+          pixInFeeValue: 0,
+          pixOutFeeType: 'PERCENT',
+          pixOutFeeValue: 0
         };
         console.log('[FeesPage] Valores padrão por erro:', errorFees);
         setFees(errorFees);
@@ -101,9 +109,15 @@ export const FeesPage: React.FC = () => {
                     <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
                   ) : (
                     <>
-                        <span className="text-4xl font-bold text-slate-900">
+                        {fees?.pixInFeeType === 'FIXED' ? (
+                          <span className="text-4xl font-bold text-slate-900">
+                            R$ {(fees?.pixInFeeValue ?? 0).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-4xl font-bold text-slate-900">
                             {(fees?.pixInPercent ?? 0).toFixed(2)}%
-                        </span>
+                          </span>
+                        )}
                     </>
                   )}
               </div>
@@ -121,9 +135,15 @@ export const FeesPage: React.FC = () => {
                     <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
                   ) : (
                     <>
-                        <span className="text-4xl font-bold text-slate-900">
+                        {fees?.pixOutFeeType === 'FIXED' ? (
+                          <span className="text-4xl font-bold text-slate-900">
+                            R$ {(fees?.pixOutFeeValue ?? 0).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-4xl font-bold text-slate-900">
                             {(fees?.pixOutPercent ?? 0).toFixed(2)}%
-                        </span>
+                          </span>
+                        )}
                     </>
                   )}
               </div>
