@@ -27,6 +27,11 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
   const [copied, setCopied] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
+  // Taxas
+  const [userFees, setUserFees] = useState<{ pixInFeeType: string; pixInFeeValue: number; pixOutFeeType: string; pixOutFeeValue: number } | null>(null);
+  const [calculatedFee, setCalculatedFee] = useState<{ feeAmount: number; netAmount: number } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -66,24 +71,74 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
     };
   }, [pollingInterval]);
 
-  // Fetch balance on mount for validation - DEPENDENCY FIXED
+  // Fetch balance and fees on mount
   useEffect(() => {
-    const fetchBalance = async () => {
-        if (mode === 'withdraw' && userId) {
-            // Only set loading if we don't have a balance yet to prevent UI flicker
-            if (currentBalance === 0) setLoadingBalance(true);
+    const fetchData = async () => {
+        if (userId) {
+            // Fetch balance for withdraw mode
+            if (mode === 'withdraw') {
+                if (currentBalance === 0) setLoadingBalance(true);
+                try {
+                    const bal = await authService.getWalletBalance(userId);
+                    setCurrentBalance(bal);
+                } catch (e) {
+                    console.error("Failed to fetch balance for validation");
+                } finally {
+                    setLoadingBalance(false);
+                }
+            }
+            
+            // Fetch fees for both modes
             try {
-                const bal = await authService.getWalletBalance(userId);
-                setCurrentBalance(bal);
+                const fees = await authService.getMyFees();
+                if (fees) {
+                    setUserFees({
+                        pixInFeeType: fees.pixInFeeType || 'PERCENT',
+                        pixInFeeValue: fees.pixInFeeValue || fees.pixInPercent || 0,
+                        pixOutFeeType: fees.pixOutFeeType || 'PERCENT',
+                        pixOutFeeValue: fees.pixOutFeeValue || fees.pixOutPercent || 0
+                    });
+                }
             } catch (e) {
-                console.error("Failed to fetch balance for validation");
-            } finally {
-                setLoadingBalance(false);
+                console.error("Failed to fetch fees");
             }
         }
     };
-    fetchBalance();
-  }, [mode, userId]); // Use userId string instead of user object
+    fetchData();
+  }, [mode, userId]);
+
+  // Calcular taxa quando o valor mudar
+  useEffect(() => {
+    if (formData.amount && userFees) {
+      const value = parseFloat(formData.amount.replace(/\D/g, '')) / 100;
+      if (value > 0) {
+        let feeAmount = 0;
+        if (mode === 'pix') {
+          // Taxa de depósito
+          if (userFees.pixInFeeType === 'FIXED') {
+            feeAmount = userFees.pixInFeeValue;
+          } else {
+            feeAmount = (value * userFees.pixInFeeValue) / 100;
+          }
+        } else {
+          // Taxa de saque
+          if (userFees.pixOutFeeType === 'FIXED') {
+            feeAmount = userFees.pixOutFeeValue;
+          } else {
+            feeAmount = (value * userFees.pixOutFeeValue) / 100;
+          }
+        }
+        setCalculatedFee({
+          feeAmount: Number(feeAmount.toFixed(2)),
+          netAmount: Number((value - feeAmount).toFixed(2))
+        });
+      } else {
+        setCalculatedFee(null);
+      }
+    } else {
+      setCalculatedFee(null);
+    }
+  }, [formData.amount, userFees, mode]);
 
   const handleNext = async () => {
       // Logic split based on mode
@@ -204,6 +259,9 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
             const newBalance = await authService.getWalletBalance(userId);
             setCurrentBalance(newBalance);
           }
+          
+          // Mostrar popup de confirmação
+          setShowSuccessModal(true);
         }
       } catch (err) {
         console.error('Erro ao verificar status do pagamento:', err);
@@ -385,6 +443,24 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
                   setFormData({...formData, amount: fmt})
                 }}
               />
+              
+              {/* Exibição de Taxas Informativas */}
+              {calculatedFee && calculatedFee.feeAmount > 0 && formData.amount && (
+                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Valor da operação:</span>
+                    <span className="font-bold text-slate-900">{formData.amount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Taxa de transação:</span>
+                    <span className="font-bold text-amber-600">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 flex justify-between">
+                    <span className="text-sm font-bold text-slate-700">Valor líquido que {mode === 'pix' ? 'será creditado' : 'será enviado'}:</span>
+                    <span className="text-sm font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {mode === 'withdraw' && (
@@ -443,9 +519,21 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-6 text-center">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-6 text-center space-y-3">
                <p className="text-amber-700 text-sm font-medium mb-1">Valor a sacar</p>
                <h3 className="text-3xl font-bold text-amber-600">R$ {formData.amount}</h3>
+               {calculatedFee && calculatedFee.feeAmount > 0 && (
+                 <div className="pt-3 border-t border-amber-200 space-y-1">
+                   <div className="flex justify-between text-sm">
+                     <span className="text-amber-700">Taxa de transação:</span>
+                     <span className="font-bold text-amber-800">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                   </div>
+                   <div className="flex justify-between text-sm font-bold">
+                     <span className="text-amber-800">Valor líquido a receber:</span>
+                     <span className="text-emerald-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                   </div>
+                 </div>
+               )}
             </div>
 
              <div className="flex gap-4 pt-4">
@@ -600,6 +688,62 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
         )}
 
       </div>
+
+      {/* Modal de Confirmação de Depósito */}
+      {showSuccessModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => {
+            setShowSuccessModal(false);
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-zoom-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center">
+              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-green-100">
+                <Check className="w-10 h-10 text-green-600" strokeWidth={3} />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Depósito Confirmado!</h2>
+              <p className="text-slate-600 mb-6">
+                Seu depósito de <span className="font-bold text-emerald-600">{formData.amount}</span> foi processado com sucesso e o valor já está disponível na sua carteira.
+              </p>
+              {calculatedFee && calculatedFee.feeAmount > 0 && (
+                <div className="mb-6 p-3 bg-slate-50 rounded-lg border border-slate-200 text-left">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600">Valor depositado:</span>
+                    <span className="font-bold">{formData.amount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600">Taxa de transação:</span>
+                    <span className="font-bold text-amber-600">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold pt-2 border-t border-slate-200">
+                    <span className="text-slate-700">Valor creditado:</span>
+                    <span className="text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  // Reiniciar página após 500ms
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 500);
+                }}
+                className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
