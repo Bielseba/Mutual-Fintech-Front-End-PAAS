@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent, Bitcoin } from 'lucide-react';
+import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent, Bitcoin, BarChart3 } from 'lucide-react';
+import Reports from './components/Reports';
 import { Dashboard } from './components/Dashboard';
 import { TransactionHistory } from './components/TransactionHistory';
 import { IntegrationDocs } from './components/IntegrationDocs';
@@ -370,6 +371,7 @@ const App: React.FC = () => {
                 <NavButton active={view === 'crypto'} onClick={() => setView('crypto')} icon={Bitcoin} label="Cripto OTC" />
                 <NavButton active={view === 'med'} onClick={() => setView('med')} icon={ShieldAlert} label="Gestão MED" />
                 <NavButton active={view === 'fees'} onClick={() => setView('fees')} icon={Percent} label="Tarifas" />
+                <NavButton active={view === 'reports'} onClick={() => setView('reports')} icon={BarChart3} label="Relatórios" />
             </nav>
 
             <div>
@@ -412,6 +414,7 @@ const App: React.FC = () => {
                     {view === 'fees' && 'Tarifas e Taxas'}
                     {view === 'integration' && 'Documentação'}
                     {view === 'settings' && 'Configurações'}
+                    {view === 'reports' && 'Relatórios'}
                 </h1>
             </div>
             <div className="flex items-center gap-4">
@@ -545,6 +548,7 @@ const App: React.FC = () => {
               {view === 'settings' && <ApiSettings />}
               {view === 'crypto' && <CryptoOTC />}
               {(view === 'pix' || view === 'withdraw') && <PixTransfer mode={view} onBack={() => setView('dashboard')} />}
+              {view === 'reports' && <Reports />}
            </div>
         </main>
 

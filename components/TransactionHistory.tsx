@@ -812,11 +812,11 @@ export const TransactionHistory: React.FC = () => {
                                                         <text
                                                             x={x + (x > cx ? offset : -offset)}
                                                             y={y}
-                                                            fill="#000000ff"
+                                                            fill="#ffffffff"
                                                             textAnchor={x > cx ? 'start' : 'end'}
                                                             dominantBaseline="central"
                                                             fontSize={15}
-                                                            fontWeight={1000}
+                                                            fontWeight={700}
                                                         >
                                                             {(percent * 100).toFixed(0)}%
                                                         </text>
