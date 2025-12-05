@@ -1158,11 +1158,34 @@ export const TransactionHistory: React.FC = () => {
                         <div className="p-6">
                             {/* Amount & Status */}
                             <div className="text-center mb-8 pb-8 border-b border-dashed border-slate-200">
-                                <p className="text-slate-500 text-sm font-medium mb-1">Valor Total</p>
+                                <p className="text-slate-500 text-sm font-medium mb-1">
+                                  {(viewingReceipt as any).totalAmount ? 'Valor Total da Transação' : 'Valor Total'}
+                                </p>
                                 <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(viewingReceipt.amount))}
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                      Math.abs((viewingReceipt as any).totalAmount || (viewingReceipt as any).originalAmount || viewingReceipt.amount)
+                                    )}
                                 </h1>
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide">
+                                {/* Exibir taxa e valor final se disponível */}
+                                {((viewingReceipt as any).feeAmount && (viewingReceipt as any).feeAmount > 0) && (
+                                  <div className="mt-4 space-y-2">
+                                    <div className="flex justify-center items-center gap-2 text-sm">
+                                      <span className="text-slate-500">Taxa de transação:</span>
+                                      <span className="font-bold text-amber-600">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((viewingReceipt as any).feeAmount)}
+                                      </span>
+                                    </div>
+                                    {(viewingReceipt as any).finalAmount !== undefined && (
+                                      <div className="flex justify-center items-center gap-2 text-sm font-bold pt-2 border-t border-slate-200">
+                                        <span className="text-slate-700">Valor final:</span>
+                                        <span className="text-emerald-600">
+                                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((viewingReceipt as any).finalAmount)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide mt-4">
                                     <CheckCircle className="w-3 h-3" /> Transação Aprovada
                                 </div>
                             </div>

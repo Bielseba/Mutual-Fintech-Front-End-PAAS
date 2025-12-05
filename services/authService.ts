@@ -395,6 +395,12 @@ export const authService = {
           }
         }
         
+        // Extrair valores de taxa e valores totais do meta
+        const originalAmount = typeof meta.originalAmount === 'number' ? meta.originalAmount : undefined;
+        const totalAmount = typeof meta.totalAmount === 'number' ? meta.totalAmount : undefined;
+        const finalAmount = typeof meta.finalAmount === 'number' ? meta.finalAmount : undefined;
+        const feeAmount = typeof meta.feeAmount === 'number' ? meta.feeAmount : undefined;
+        
         return {
           id: tx.id || tx._id || 'TX-UNK',
           amount,
@@ -408,7 +414,12 @@ export const authService = {
           document: tx.meta?.document || tx.document || undefined,
           payerName: tx.meta?.payer_name || tx.meta?.payerName || tx.payer_name || tx.payerName || undefined,
           providerOrderNo: tx.meta?.providerOrderNo || tx.providerOrderNo || undefined,
-          balanceAfter
+          balanceAfter,
+          // Adicionar informações de taxa e valores
+          originalAmount,
+          totalAmount,
+          finalAmount,
+          feeAmount
         } as Transaction;
       });
   },
