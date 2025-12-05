@@ -25,6 +25,8 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
   const [pixResult, setPixResult] = useState<{ qrCode: string; qrCodeImage: string; orderId: string; expiresAt: string } | null>(null);
   const [withdrawResult, setWithdrawResult] = useState<{ orderId: string; status: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -42,6 +44,11 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
     setPixResult(null);
     setWithdrawResult(null);
     setCopied(false);
+    setPaymentConfirmed(false);
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
     setFormData({
       pixKey: '',
       pixKeyType: 'CPF',
@@ -49,6 +56,15 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
       description: '',
     });
   }, [mode]);
+
+  // Cleanup do polling ao desmontar
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   // Fetch balance on mount for validation - DEPENDENCY FIXED
   useEffect(() => {
@@ -128,6 +144,7 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
   const handleGeneratePix = async () => {
     setIsLoading(true);
     setError(null);
+    setPaymentConfirmed(false);
     try {
         const value = parseFloat(formData.amount.replace(/\D/g, '')) / 100;
         if (value <= 0) throw new Error("Valor inválido.");
@@ -135,11 +152,65 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
         const result = await authService.createPixCharge(value);
         setPixResult(result);
         setStep(3); // Jump directly to Success/Result screen
+        
+        // Iniciar polling para verificar se o pagamento foi confirmado
+        startPaymentPolling(result.orderId, value);
     } catch (err: any) {
         setError(err.message || "Erro ao gerar Pix.");
     } finally {
         setIsLoading(false);
     }
+  };
+
+  const startPaymentPolling = (orderId: string, expectedAmount: number) => {
+    // Limpar polling anterior se existir
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutos (5 segundos * 60)
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      
+      if (attempts > maxAttempts) {
+        clearInterval(interval);
+        setPollingInterval(null);
+        return;
+      }
+
+      try {
+        const ledger = await authService.getWalletLedger();
+        
+        // Procurar por transação de depósito recente que corresponda ao orderId ou valor
+        const recentDeposit = ledger.find((tx: any) => {
+          const isDeposit = tx.type === 'CREDIT' || tx.amount > 0;
+          const matchesAmount = Math.abs(Math.abs(tx.amount) - expectedAmount) < 0.01;
+          const isRecent = new Date(tx.date).getTime() > Date.now() - 10 * 60 * 1000; // Últimos 10 minutos
+          const isPixDeposit = /PIX DEPOSIT|Depósito Pix/i.test(tx.description || '');
+          
+          return isDeposit && matchesAmount && isRecent && isPixDeposit;
+        });
+
+        if (recentDeposit) {
+          // Pagamento confirmado!
+          setPaymentConfirmed(true);
+          clearInterval(interval);
+          setPollingInterval(null);
+          
+          // Atualizar saldo
+          if (userId) {
+            const newBalance = await authService.getWalletBalance(userId);
+            setCurrentBalance(newBalance);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status do pagamento:', err);
+      }
+    }, 5000); // Verificar a cada 5 segundos
+
+    setPollingInterval(interval);
   };
 
   const handleWithdrawSubmit = async () => {
@@ -412,11 +483,29 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
              ) : (
                  // PIX IN (QR CODE) UI
                  <>
-                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-100">
-                        <QrCode className="w-10 h-10 text-amber-600" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Cobrança Gerada</h2>
-                    <p className="text-slate-500 mb-6">Escaneie o QR Code ou copie o código abaixo para pagar.</p>
+                    {paymentConfirmed ? (
+                      <>
+                        <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-green-100">
+                          <Check className="w-10 h-10 text-green-600" strokeWidth={3} />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-2">Pagamento Confirmado!</h2>
+                        <p className="text-slate-500 mb-6">Seu depósito foi processado com sucesso e o valor já está disponível na sua carteira.</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-100">
+                          <QrCode className="w-10 h-10 text-amber-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-2">Cobrança Gerada</h2>
+                        <p className="text-slate-500 mb-6">Escaneie o QR Code ou copie o código abaixo para pagar.</p>
+                        {pollingInterval && (
+                          <div className="mb-4 flex items-center justify-center gap-2 text-sm text-amber-600">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Aguardando confirmação do pagamento...</span>
+                          </div>
+                        )}
+                      </>
+                    )}
                  </>
              )}
 
