@@ -523,7 +523,23 @@ export const authService = {
       
       const json = await response.json();
       if (!response.ok) {
-          const errorMsg = json.message || json.error || "Erro ao processar saque";
+          // Mensagem mais clara baseada no tipo de erro
+          let errorMsg = json.message || json.error || "Erro ao processar saque";
+          
+          // Se for erro do gateway (502), mensagem mais amigável
+          if (response.status === 502 || json.error === 'GatewayPixWithdrawFailed') {
+              errorMsg = json.message || "O serviço de pagamento está temporariamente indisponível. Tente novamente em alguns instantes.";
+          }
+          
+          // Se for erro de validação ou saldo insuficiente
+          if (response.status === 400) {
+              if (json.error === 'InsufficientFunds' || json.details?.message?.includes('Saldo insuficiente')) {
+                  errorMsg = json.details?.message || "Saldo insuficiente para realizar o saque.";
+              } else {
+                  errorMsg = json.message || json.error || "Dados inválidos. Verifique as informações e tente novamente.";
+              }
+          }
+          
           throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
       
