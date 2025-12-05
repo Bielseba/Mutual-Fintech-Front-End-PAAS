@@ -220,12 +220,12 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 </div>
                 {showQuickActions && (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                            {[ 
+                                              {[ 
                           {key:'pix', label:'Enviar Pix', icon: QrCode},
                           {key:'withdraw', label:'Receber Pix', icon: QrCode},
                           {key:'pix-copy-paste', label:'Pix Copia e Cola', icon: ClipboardList},
                           {key:'pix-refund', label:'Estornar Pix', icon: Undo2},
-                          {key:'pix-favorites', label:'Pix Favorecido', icon: Star},
+                                                  {key:'beneficiaries', label:'Pix Favorecido', icon: Star},
                           {key:'transactions', label:'Extrato Detalhado', icon: Receipt},
                           {key:'transactions-consolidated', label:'Extrato Consolidado', icon: BarChart2},
                           {key:'favorites', label:'Favorecidos', icon: Users},
@@ -235,7 +235,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                           <button
                             key={a.key}
                             onClick={() => {
-                                                            const soonKeys = ['pix-copy-paste','pix-refund','pix-favorites','favorites','authorizations'];
+                                                                                                                        const soonKeys = ['pix-copy-paste','pix-refund','favorites','authorizations'];
                                                             if (soonKeys.includes(a.key)) {
                                                                 console.log('Coming soon clicked:', a.key, a.label);
                                                                 setComingSoon(a.label);

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent, Bitcoin, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Receipt, Code2, Settings, LogOut, Bell, Loader2, AlertCircle, CheckCircle, Building2, QrCode, Landmark, Menu, X, ChevronRight, User, Home, FileText, ArrowRightLeft, ShieldAlert, Trash2, Percent, Bitcoin, BarChart3, Users } from 'lucide-react';
 import Reports from './components/Reports';
 import { Dashboard } from './components/Dashboard';
 import { TransactionHistory } from './components/TransactionHistory';
@@ -11,6 +11,7 @@ import { MedManagement } from './components/MedManagement';
 import { FeesPage } from './components/FeesPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { CryptoOTC } from './components/CryptoOTC';
+import PixBeneficiaries from './components/PixBeneficiaries';
 import { ViewState, User as UserType } from './types';
 import { authService } from './services/authService';
 
@@ -368,6 +369,7 @@ const App: React.FC = () => {
                 <div className="my-4 h-px bg-white/5 mx-4"></div>
                 <NavButton active={view === 'pix'} onClick={() => setView('pix')} icon={QrCode} label="Depositar (Pix In)" />
                 <NavButton active={view === 'withdraw'} onClick={() => setView('withdraw')} icon={Landmark} label="Sacar (Pix Out)" />
+                <NavButton active={view === 'beneficiaries'} onClick={() => setView('beneficiaries')} icon={Users} label="Pix Favorecidos" />
                 <NavButton active={view === 'crypto'} onClick={() => setView('crypto')} icon={Bitcoin} label="Cripto OTC" />
                 <NavButton active={view === 'med'} onClick={() => setView('med')} icon={ShieldAlert} label="Gestão MED" />
                 <NavButton active={view === 'fees'} onClick={() => setView('fees')} icon={Percent} label="Tarifas" />
@@ -415,6 +417,7 @@ const App: React.FC = () => {
                     {view === 'integration' && 'Documentação'}
                     {view === 'settings' && 'Configurações'}
                     {view === 'reports' && 'Relatórios'}
+                    {view === 'beneficiaries' && 'Pix Favorecidos'}
                 </h1>
             </div>
             <div className="flex items-center gap-4">
@@ -549,6 +552,7 @@ const App: React.FC = () => {
               {view === 'crypto' && <CryptoOTC />}
               {(view === 'pix' || view === 'withdraw') && <PixTransfer mode={view} onBack={() => setView('dashboard')} />}
               {view === 'reports' && <Reports />}
+              {view === 'beneficiaries' && <PixBeneficiaries />}
            </div>
         </main>
 
