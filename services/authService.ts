@@ -505,12 +505,13 @@ export const authService = {
       else apiType = 'evp';
 
       // 4. Montar Payload conforme documentação StarPago
+      // bankCode é obrigatório e é o mesmo que keyType na API StarPago
       const payload = {
           userId: userId,
           amount: amount,
           key: pixKey,
           keyType: apiType,
-          bankCode: apiType 
+          bankCode: apiType // bankCode é o mesmo que keyType na StarPago
       };
       
       console.log("Enviando Saque Payload:", payload);
