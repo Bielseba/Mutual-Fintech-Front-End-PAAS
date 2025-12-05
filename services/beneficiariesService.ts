@@ -9,9 +9,9 @@ export type Beneficiary = {
 }
 
 const API_BASE = (() => {
+  const DEFAULT_BACKEND = 'https://mutual-fintech-user-service.vercel.app'
   const winBase = typeof window !== 'undefined' ? (window as any).API_BASE_URL : ''
-  const fallback = typeof window !== 'undefined' ? window.location.origin : ''
-  const base = (winBase && String(winBase)) || fallback
+  const base = (winBase && String(winBase)) || DEFAULT_BACKEND
   return base.replace(/\/$/, '')
 })()
 
