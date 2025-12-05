@@ -114,24 +114,28 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
       if (value > 0) {
         let feeAmount = 0;
         if (mode === 'pix') {
-          // Taxa de depósito
+          // Taxa de depósito: valor depositado - taxa = valor líquido creditado
           if (userFees.pixInFeeType === 'FIXED') {
             feeAmount = userFees.pixInFeeValue;
           } else {
             feeAmount = (value * userFees.pixInFeeValue) / 100;
           }
+          setCalculatedFee({
+            feeAmount: Number(feeAmount.toFixed(2)),
+            netAmount: Number((value - feeAmount).toFixed(2)) // Valor líquido creditado
+          });
         } else {
-          // Taxa de saque
+          // Taxa de saque: valor a sacar + taxa = valor total debitado
           if (userFees.pixOutFeeType === 'FIXED') {
             feeAmount = userFees.pixOutFeeValue;
           } else {
             feeAmount = (value * userFees.pixOutFeeValue) / 100;
           }
+          setCalculatedFee({
+            feeAmount: Number(feeAmount.toFixed(2)),
+            netAmount: Number((value + feeAmount).toFixed(2)) // Valor total debitado
+          });
         }
-        setCalculatedFee({
-          feeAmount: Number(feeAmount.toFixed(2)),
-          netAmount: Number((value - feeAmount).toFixed(2))
-        });
       } else {
         setCalculatedFee(null);
       }
@@ -160,13 +164,19 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
 
              const value = parseFloat(formData.amount.replace(/\D/g, '')) / 100;
              
+             // Calcular valor total a ser debitado (valor + taxa)
+             let totalToDebit = value;
+             if (calculatedFee && calculatedFee.feeAmount > 0) {
+               totalToDebit = calculatedFee.netAmount; // No saque, netAmount já é valor + taxa
+             }
+             
              // 🛑 BALANCE VALIDATION RULE
              if (currentBalance <= 0) {
                  setError("Você não possui saldo suficiente para saque.");
                  return;
              }
-             if (value > currentBalance) {
-                 setError(`Saldo insuficiente para esta operação.`);
+             if (totalToDebit > currentBalance) {
+                 setError(`Saldo insuficiente. Você precisa de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalToDebit)} (valor + taxa) para realizar este saque.`);
                  return;
              }
              
@@ -447,18 +457,39 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
               {/* Exibição de Taxas Informativas */}
               {calculatedFee && calculatedFee.feeAmount > 0 && formData.amount && (
                 <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Valor da operação:</span>
-                    <span className="font-bold text-slate-900">{formData.amount}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Taxa de transação:</span>
-                    <span className="font-bold text-amber-600">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between">
-                    <span className="text-sm font-bold text-slate-700">Valor líquido que {mode === 'pix' ? 'será creditado' : 'será enviado'}:</span>
-                    <span className="text-sm font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
-                  </div>
+                  {mode === 'pix' ? (
+                    // Depósito: valor depositado - taxa = valor líquido creditado
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Valor da operação:</span>
+                        <span className="font-bold text-slate-900">{formData.amount}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Taxa de transação:</span>
+                        <span className="font-bold text-amber-600">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-200 flex justify-between">
+                        <span className="text-sm font-bold text-slate-700">Valor líquido que será creditado:</span>
+                        <span className="text-sm font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    // Saque: valor a sacar + taxa = valor total debitado
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Valor a sacar:</span>
+                        <span className="font-bold text-slate-900">{formData.amount}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Taxa de transação:</span>
+                        <span className="font-bold text-amber-600">+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-200 flex justify-between">
+                        <span className="text-sm font-bold text-slate-700">Valor total a ser debitado:</span>
+                        <span className="text-sm font-bold text-rose-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -526,11 +557,11 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
                  <div className="pt-3 border-t border-amber-200 space-y-1">
                    <div className="flex justify-between text-sm">
                      <span className="text-amber-700">Taxa de transação:</span>
-                     <span className="font-bold text-amber-800">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
+                     <span className="font-bold text-amber-800">+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.feeAmount)}</span>
                    </div>
                    <div className="flex justify-between text-sm font-bold">
-                     <span className="text-amber-800">Valor líquido a receber:</span>
-                     <span className="text-emerald-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
+                     <span className="text-amber-800">Valor total a ser debitado:</span>
+                     <span className="text-rose-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedFee.netAmount)}</span>
                    </div>
                  </div>
                )}
