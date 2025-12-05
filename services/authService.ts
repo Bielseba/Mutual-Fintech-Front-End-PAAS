@@ -376,11 +376,30 @@ export const authService = {
           : (typeof meta.previousBalance === 'number')
             ? Number(meta.previousBalance) + amount
             : undefined;
+        // Formatar descrição baseado no tipo de transação
+        let formattedDescription = tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito');
+        
+        // Se for taxa de transação, manter a descrição original
+        if (meta.feeType === 'TRANSACTION_FEE' || /Taxa de transação/i.test(formattedDescription)) {
+          formattedDescription = 'Taxa de transação';
+        }
+        // Formatar depósitos e saques
+        else if (/PIX DEPOSIT|Depósito Pix|Depósito STARPAGO/i.test(formattedDescription)) {
+          formattedDescription = 'Depósito Pix';
+        }
+        else if (/PIX WITHDRAW|PIX OUT|Saque Pix|Saque STARPAGO/i.test(formattedDescription)) {
+          // Remover informações de taxa da descrição principal
+          formattedDescription = formattedDescription.replace(/\s*\+\s*Taxa:.*$/i, '').trim();
+          if (!formattedDescription || formattedDescription === 'PIX OUT') {
+            formattedDescription = 'Saque Pix';
+          }
+        }
+        
         return {
           id: tx.id || tx._id || 'TX-UNK',
           amount,
           date: created,
-          description: tx.description || (direction === 'CREDIT' ? 'Crédito' : 'Débito'),
+          description: formattedDescription,
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
           status: (tx.status || 'COMPLETED') as any,
           sender: tx.meta?.sender || tx.sender || undefined,
@@ -486,12 +505,13 @@ export const authService = {
       else apiType = 'evp';
 
       // 4. Montar Payload conforme documentação StarPago
+      // bankCode é obrigatório e é o mesmo que keyType na API StarPago
       const payload = {
           userId: userId,
           amount: amount,
           key: pixKey,
           keyType: apiType,
-          bankCode: apiType 
+          bankCode: apiType // bankCode é o mesmo que keyType na StarPago
       };
       
       console.log("Enviando Saque Payload:", payload);
@@ -504,7 +524,23 @@ export const authService = {
       
       const json = await response.json();
       if (!response.ok) {
-          const errorMsg = json.message || json.error || "Erro ao processar saque";
+          // Mensagem mais clara baseada no tipo de erro
+          let errorMsg = json.message || json.error || "Erro ao processar saque";
+          
+          // Se for erro do gateway (502), mensagem mais amigável
+          if (response.status === 502 || json.error === 'GatewayPixWithdrawFailed') {
+              errorMsg = json.message || "O serviço de pagamento está temporariamente indisponível. Tente novamente em alguns instantes.";
+          }
+          
+          // Se for erro de validação ou saldo insuficiente
+          if (response.status === 400) {
+              if (json.error === 'InsufficientFunds' || json.details?.message?.includes('Saldo insuficiente')) {
+                  errorMsg = json.details?.message || "Saldo insuficiente para realizar o saque.";
+              } else {
+                  errorMsg = json.message || json.error || "Dados inválidos. Verifique as informações e tente novamente.";
+              }
+          }
+          
           throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
       
