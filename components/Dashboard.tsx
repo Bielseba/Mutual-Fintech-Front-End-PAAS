@@ -148,7 +148,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 bg-emerald-50 rounded-xl shrink-0"><ArrowDownLeft className="w-5 h-5 text-emerald-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Entrada (meta)</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                            Entrada
+                            <br/>
+                            (mês)
+                        </span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(income)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Saldo mês</p>
@@ -159,7 +163,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                     <div className="relative z-10">
                         <div className="flex items-center gap-3 mb-2">
                             <div className="p-2 bg-white/10 rounded-xl shrink-0"><Wallet className="w-5 h-5 text-indigo-300" /></div>
-                            <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Disponível</span>
+                            <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                                Saldo
+                                <br/>
+                                Disponível
+                            </span>
                         </div>
                         <h2 className="text-3xl font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balance)}</h2>
                         <p className="text-xs text-slate-300 mt-1">Para usar</p>
@@ -169,7 +177,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 bg-rose-50 rounded-xl shrink-0"><ArrowUpRight className="w-5 h-5 text-rose-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saídas (meta)</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                            Saídas
+                            <br/>
+                            (mês)
+                        </span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(expenses)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Saldo mês</p>
@@ -178,7 +190,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Bloqueado</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                            Saldo
+                            <br/>
+                            Bloqueado
+                        </span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(0)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Bloqueado</p>
@@ -187,7 +203,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Garantia</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                            Saldo
+                            <br/>
+                            Garantia
+                        </span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(0)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Reservado</p>
@@ -196,7 +216,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ArrowDownLeft className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Número de transações</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block leading-tight">
+                            Número de
+                            <br/>
+                            Transações
+                        </span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{transactions.length}</h2>
                     <p className="text-xs text-slate-400 mt-2">Total no sistema</p>
