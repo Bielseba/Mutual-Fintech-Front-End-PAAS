@@ -230,19 +230,27 @@ export const TransactionHistory: React.FC = () => {
   const handleExportCSV = () => {
       const data = getFilteredTransactions();
       if (!data.length) return;
-
-      const headers = ['ID', 'Data', 'Hora', 'Descrição', 'Tipo', 'Valor', 'Status', 'Origem', 'Destino'];
-      const rows = data.map(tx => [
+      const headers = ['ID', 'Data', 'Hora', 'Descrição', 'Tipo', 'Valor', 'Taxa', 'Total', 'Status', 'Origem', 'Destino'];
+      const rows = data.map(tx => {
+          const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+          const feeAmount = (tx as any).feeAmount || 0;
+          const totalAmount = isCredit
+              ? ((tx as any).originalAmount ?? Math.abs(tx.amount))
+              : (Math.abs(tx.amount) + (feeAmount || 0));
+          return [
           tx.id,
           new Date(tx.date).toLocaleDateString('pt-BR'),
           new Date(tx.date).toLocaleTimeString('pt-BR'),
           `"${cleanDescription(tx.description, tx.type, tx.amount)}"`,
           tx.type === 'CREDIT' ? 'Entrada' : 'Saída',
           tx.amount.toFixed(2).replace('.', ','),
+          (feeAmount || 0).toFixed(2).replace('.', ','),
+          totalAmount.toFixed(2).replace('.', ','),
           tx.status,
           tx.sender || '-',
           tx.recipient || '-'
-      ]);
+      ];
+      });
 
       const csvContent = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
       const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -255,7 +263,7 @@ export const TransactionHistory: React.FC = () => {
       document.body.removeChild(link);
   };
 
-  const handleExportPDF = () => {
+    const handleExportPDF = () => {
     const data = getFilteredTransactions();
     if (!data.length) return;
 
@@ -283,10 +291,12 @@ export const TransactionHistory: React.FC = () => {
                 .card-value { font-size: 18px; font-weight: bold; margin-top: 5px; }
                 .text-green { color: #10b981; }
                 .text-red { color: #f43f5e; }
-                table { w-full; border-collapse: collapse; width: 100%; font-size: 12px; }
+                table { border-collapse: collapse; width: 100%; font-size: 12px; }
                 th { text-align: left; padding: 10px; border-bottom: 1px solid #cbd5e1; background: #f1f5f9; text-transform: uppercase; font-size: 10px; color: #475569; }
                 td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
                 .amount { font-weight: bold; text-align: right; }
+                .fee { color: #f59e0b; text-align: right; }
+                .total { color: #0ea5e9; font-weight: 600; text-align: right; }
                 .status { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
                 .footer { margin-top: 40px; font-size: 10px; text-align: center; color: #94a3b8; border-top: 1px solid #eee; padding-top: 20px; }
             </style>
@@ -327,11 +337,17 @@ export const TransactionHistory: React.FC = () => {
                         <th>Tipo</th>
                         <th>Status</th>
                         <th style="text-align: right">Valor</th>
+                        <th style="text-align: right">Taxa</th>
+                        <th style="text-align: right">Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${data.map(tx => {
                         const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+                        const feeAmount = (tx as any).feeAmount || 0;
+                        const totalAmount = isCredit
+                            ? ((tx as any).originalAmount ?? Math.abs(tx.amount))
+                            : (Math.abs(tx.amount) + (feeAmount || 0));
                         return `
                         <tr>
                             <td>
@@ -345,6 +361,8 @@ export const TransactionHistory: React.FC = () => {
                             <td class="amount" style="color: ${isCredit ? '#10b981' : '#f43f5e'}">
                                 ${isCredit ? '+' : '-'} R$ ${Math.abs(tx.amount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                             </td>
+                            <td class="fee">R$ ${Number(feeAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                            <td class="total">R$ ${Number(totalAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                         </tr>
                         `;
                     }).join('')}
@@ -369,7 +387,20 @@ export const TransactionHistory: React.FC = () => {
     const handleExportJSON = () => {
         const data = getFilteredTransactions();
         if (!data.length) return;
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const enriched = data.map(tx => {
+            const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+            const feeAmount = (tx as any).feeAmount || 0;
+            const totalAmount = isCredit
+                ? ((tx as any).originalAmount ?? Math.abs(tx.amount))
+                : (Math.abs(tx.amount) + (feeAmount || 0));
+            return {
+                ...tx,
+                feeAmount,
+                totalAmount,
+                descriptionClean: cleanDescription(tx.description, tx.type, tx.amount)
+            };
+        });
+        const blob = new Blob([JSON.stringify(enriched, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -381,7 +412,14 @@ export const TransactionHistory: React.FC = () => {
     const handleExportTXT = () => {
         const data = getFilteredTransactions();
         if (!data.length) return;
-        const lines = data.map(tx => `${new Date(tx.date).toLocaleString('pt-BR')} | ${tx.id} | ${cleanDescription(tx.description, tx.type, tx.amount)} | ${(tx.type==='CREDIT'||tx.amount>0)?'+':'-'} R$ ${Math.abs(tx.amount).toFixed(2)}`);
+        const lines = data.map(tx => {
+            const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+            const feeAmount = (tx as any).feeAmount || 0;
+            const totalAmount = isCredit
+                ? ((tx as any).originalAmount ?? Math.abs(tx.amount))
+                : (Math.abs(tx.amount) + (feeAmount || 0));
+            return `${new Date(tx.date).toLocaleString('pt-BR')} | ${tx.id} | ${cleanDescription(tx.description, tx.type, tx.amount)} | ${(isCredit)?'+':'-'} R$ ${Math.abs(tx.amount).toFixed(2)} | Taxa: R$ ${Number(feeAmount).toFixed(2)} | Total: R$ ${Number(totalAmount).toFixed(2)}`;
+        });
         const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -395,16 +433,25 @@ export const TransactionHistory: React.FC = () => {
         // Simple XLS (HTML table) for quick compatibility
         const data = getFilteredTransactions();
         if (!data.length) return;
-        const headers = ['Data','Hora','ID','Descrição','Tipo','Status','Valor'];
-        const rows = data.map(tx => [
-            new Date(tx.date).toLocaleDateString('pt-BR'),
-            new Date(tx.date).toLocaleTimeString('pt-BR'),
-            tx.id,
-            cleanDescription(tx.description, tx.type, tx.amount),
-            (tx.type==='CREDIT'||tx.amount>0)?'Entrada':'Saída',
-            String(tx.status),
-            Math.abs(tx.amount).toFixed(2).replace('.', ',')
-        ]);
+        const headers = ['Data','Hora','ID','Descrição','Tipo','Status','Valor','Taxa','Total'];
+        const rows = data.map(tx => {
+            const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+            const feeAmount = (tx as any).feeAmount || 0;
+            const totalAmount = isCredit
+                ? ((tx as any).originalAmount ?? Math.abs(tx.amount))
+                : (Math.abs(tx.amount) + (feeAmount || 0));
+            return [
+                new Date(tx.date).toLocaleDateString('pt-BR'),
+                new Date(tx.date).toLocaleTimeString('pt-BR'),
+                tx.id,
+                cleanDescription(tx.description, tx.type, tx.amount),
+                (isCredit)?'Entrada':'Saída',
+                String(tx.status),
+                Math.abs(tx.amount).toFixed(2).replace('.', ','),
+                Number(feeAmount).toFixed(2).replace('.', ','),
+                Number(totalAmount).toFixed(2).replace('.', ',')
+            ];
+        });
         const table = `<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
         const blob = new Blob([`\ufeff${table}`], { type: 'application/vnd.ms-excel' });
         const url = URL.createObjectURL(blob);
@@ -695,11 +742,11 @@ export const TransactionHistory: React.FC = () => {
             <>
                 {/* 📊 CONSOLIDATED VIEW */}
                 {activeTab === 'consolidated' && (
-                    <div className="p-6 lg:p-8 space-y-8">
+                    <div className="p-4 lg:p-6 xl:p-8 space-y-6 xl:space-y-8">
                         {/* Filtros (Consolidado) */}
-                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3 md:p-4">
                             <div className="flex items-center gap-2 mb-4 text-slate-700 font-bold"><Filter className="w-4 h-4" /> Filtros</div>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                 <div>
                                     <label className="text-xs text-slate-500 font-bold">Período</label>
                                     <select
@@ -728,7 +775,7 @@ export const TransactionHistory: React.FC = () => {
                                     <button onClick={fetchTransactions} className="flex-1 px-4 py-2 bg-[#0F172A] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Filter className="w-4 h-4" /> Aplicar</button>
                                 </div>
                             </div>
-                            <div className="mt-3 flex gap-2">
+                            <div className="mt-3 flex flex-wrap gap-2">
                                 <button onClick={handleExportCSV} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><Download className="w-4 h-4" /> CSV</button>
                                 <button onClick={handleExportXLS} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><Download className="w-4 h-4" /> XLSX</button>
                                 <button onClick={fetchTransactions} className="ml-auto px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center gap-2"><RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Atualizar</button>
@@ -737,25 +784,25 @@ export const TransactionHistory: React.FC = () => {
                         {/* Charts Row */}
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     {/* Subtotais do período filtrado */}
-                                    <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-                                        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                                    <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
+                                        <div className="p-3 md:p-4 rounded-xl bg-emerald-50 border border-emerald-100">
                                             <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-bold">Total de Transações</p>
                                             <p className="text-xl font-bold text-emerald-900">{subtotal.totalTransactions.toLocaleString('pt-BR')}</p>
                                         </div>
-                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                             <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Recebido</p>
                                             <p className="text-xl font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalReceived)}</p>
                                         </div>
-                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                             <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Enviado</p>
                                             <p className="text-xl font-bold text-rose-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalSent)}</p>
                                         </div>
-                                        <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                             <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Saldo Líquido</p>
                                             <p className={`text-xl font-bold ${netBalance >= 0 ? 'text-indigo-600' : 'text-slate-600'}`}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netBalance)}</p>
                                         </div>
                                     </div>
-                            <div className="lg:col-span-2 bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                            <div className="lg:col-span-2 bg-white border border-slate-100 rounded-2xl p-4 md:p-6 shadow-sm">
                                 <h3 className="text-sm font-bold text-slate-900 mb-6">Movimentação Diária</h3>
                                                 <div className="flex items-center gap-3 mb-3">
                                                     <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -791,7 +838,7 @@ export const TransactionHistory: React.FC = () => {
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm flex flex-col items-center justify-center">
+                            <div className="bg-white border border-slate-100 rounded-2xl p-4 md:p-6 shadow-sm flex flex-col items-center justify-center">
                                 <h3 className="text-sm font-bold text-slate-900 mb-4 w-full text-left">Distribuição</h3>
                                 <div className="w-full h-[200px]">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -842,7 +889,7 @@ export const TransactionHistory: React.FC = () => {
 
                         {/* Daily Summary Table */}
                         <div className="border border-slate-100 rounded-2xl overflow-hidden">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100">
+                            <div className="bg-slate-50 px-4 md:px-6 py-3 md:py-4 border-b border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-900">Movimentação Detalhada por Dia</h3>
                             </div>
                             <table className="w-full text-left text-sm">
@@ -877,24 +924,24 @@ export const TransactionHistory: React.FC = () => {
 
                 {/* 📝 DETAILED VIEW */}
                 {activeTab === 'detailed' && (
-                    <div className="p-6 lg:p-8 space-y-6">
+                    <div className="p-4 lg:p-6 xl:p-8 space-y-6">
                         {/* Totais do Período */}
-                        <div className="rounded-2xl border border-black-100 bg-gray-50 p-4">
+                        <div className="rounded-2xl border border-black-100 bg-gray-50 p-3 md:p-4">
                             <p className="text-[11px] uppercase tracking-wide text-black-800 font-bold mb-">Totais do Período</p>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
+                                <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Total de Transações</p>
                                     <p className="text-xl font-bold text-slate-900">{subtotal.totalTransactions.toLocaleString('pt-BR')}</p>
                                 </div>
-                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Recebido</p>
                                     <p className="text-xl font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalReceived)}</p>
                                 </div>
-                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Valor Total Enviado</p>
                                     <p className="text-xl font-bold text-rose-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal.totalSent)}</p>
                                 </div>
-                                <div className="p-4 rounded-xl bg-white border border-slate-200">
+                                <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-200">
                                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Saldo Líquido</p>
                                     <p className={`text-xl font-bold ${netBalance >= 0 ? 'text-indigo-600' : 'text-slate-600'}`}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netBalance)}</p>
                                 </div>
@@ -1011,7 +1058,7 @@ export const TransactionHistory: React.FC = () => {
                                                     )}
                                                     {isCredit && tx.originalAmount && tx.originalAmount > Math.abs(tx.amount) && (
                                                         <span className="text-[11px] text-slate-500">
-                                                            Total depositado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
+                                                            Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
                                                         </span>
                                                     )}
                                                     {!isCredit && feeAmount > 0 && (
@@ -1032,10 +1079,32 @@ export const TransactionHistory: React.FC = () => {
                                             </button>
                                             {activeMenuId === tx.id && (
                                                 <div className="absolute right-4 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 animate-fade-in">
-                                                    <button onClick={() => { setViewingReceipt(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                                    <button onClick={(e) => { 
+                                                        setViewingReceipt(tx); 
+                                                        setActiveMenuId(null);
+                                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                        const row = (e.currentTarget.closest('div') as HTMLElement)?.getBoundingClientRect();
+                                                        const baseTop = (row?.top ?? rect.top) + window.scrollY;
+                                                        let top = baseTop + 120; // show a bit below the click
+                                                        const marginBottom = 24;
+                                                        const maxTop = window.scrollY + (window.innerHeight - marginBottom - 360);
+                                                        if (top > maxTop) top = maxTop;
+                                                        setModalTop(top);
+                                                    }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
                                                         <FileText className="w-4 h-4" /> Ver Comprovante
                                                     </button>
-                                                    <button onClick={() => { setActionsTx(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                                    <button onClick={(e) => { 
+                                                        setActionsTx(tx); 
+                                                        setActiveMenuId(null); 
+                                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                        const container = (e.currentTarget.closest('div') as HTMLElement)?.getBoundingClientRect();
+                                                        const baseTop = (container?.top ?? rect.top) + window.scrollY;
+                                                        let top = baseTop + 140;
+                                                        const marginBottom = 24;
+                                                        const maxTop = window.scrollY + (window.innerHeight - marginBottom - 420);
+                                                        if (top > maxTop) top = maxTop;
+                                                        setModalTop(top);
+                                                    }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
                                                         <MoreHorizontal className="w-4 h-4" /> Ações
                                                     </button>
                                                 </div>
@@ -1047,7 +1116,7 @@ export const TransactionHistory: React.FC = () => {
                         </div>
 
                         {/* Desktop/Tablet table */}
-                        <table className="hidden sm:table w-full text-left text-sm whitespace-nowrap table-fixed">
+                        <table className="hidden md:table w-full text-left text-sm whitespace-nowrap table-fixed">
                         <thead className="bg-slate-50 border-b border-slate-100">
                             <tr>
                                 <th className="px-3 sm:px-6 py-3 sm:py-4 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Data</th>
@@ -1192,8 +1261,8 @@ export const TransactionHistory: React.FC = () => {
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-2 sm:px-3 py-3 sm:py-4 text-slate-700 font-medium hidden sm:table-cell">{documento}</td>
-                                <td className={`px-2 sm:px-4 py-3 sm:py-4 text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <td className="px-2 sm:px-3 py-3 sm:py-4 text-slate-700 font-medium hidden sm:table-cell align-middle truncate max-w-[180px]">{documento}</td>
+                                <td className={`px-2 sm:px-4 py-3 sm:py-4 text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'} align-middle`}>
                                     <div className="flex flex-col items-end gap-1">
                                         <span className="font-bold">
                                             {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
@@ -1205,7 +1274,7 @@ export const TransactionHistory: React.FC = () => {
                                         )}
                                         {isCredit && tx.originalAmount && tx.originalAmount > Math.abs(tx.amount) && (
                                             <span className="text-xs text-slate-500">
-                                                Total depositado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
+                                                Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
                                             </span>
                                         )}
                                         {!isCredit && feeAmount > 0 && (
@@ -1225,10 +1294,28 @@ export const TransactionHistory: React.FC = () => {
                                     </button>
                                     {activeMenuId === tx.id && (
                                         <div className="absolute right-12 top-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-1 animate-fade-in">
-                                            <button onClick={() => { setViewingReceipt(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                            <button onClick={(e) => { 
+                                                setViewingReceipt(tx); 
+                                                setActiveMenuId(null);
+                                                const tr = e.currentTarget.closest('tr') as HTMLElement | null;
+                                                const rect = (tr?.getBoundingClientRect() || e.currentTarget.getBoundingClientRect());
+                                                let top = rect.top + window.scrollY + 120;
+                                                const maxTop = window.scrollY + (window.innerHeight - 24 - 360);
+                                                if (top > maxTop) top = maxTop;
+                                                setModalTop(top);
+                                            }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
                                                 <FileText className="w-4 h-4" /> Ver Comprovante
                                             </button>
-                                            <button onClick={() => { setActionsTx(tx); setActiveMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
+                                            <button onClick={(e) => { 
+                                                setActionsTx(tx); 
+                                                setActiveMenuId(null);
+                                                const tr = e.currentTarget.closest('tr') as HTMLElement | null;
+                                                const rect = (tr?.getBoundingClientRect() || e.currentTarget.getBoundingClientRect());
+                                                let top = rect.top + window.scrollY + 140;
+                                                const maxTop = window.scrollY + (window.innerHeight - 24 - 420);
+                                                if (top > maxTop) top = maxTop;
+                                                setModalTop(top);
+                                            }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg font-medium transition-colors">
                                                 <MoreHorizontal className="w-4 h-4" /> Ações
                                             </button>
                                         </div>
