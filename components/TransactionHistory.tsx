@@ -670,8 +670,8 @@ export const TransactionHistory: React.FC = () => {
                             <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
                                 <span className="w-5 h-5 rounded-full bg-white/60 text-emerald-700 grid place-items-center">1</span> Campo
                             </span>
-                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
-                                <span className="w-5 h-5 rounded-full bg-white/60 text-amber-700 grid place-items-center">2</span> Tipo
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                                <span className="w-5 h-5 rounded-full bg-white/60 text-emerald-700 grid place-items-center">2</span> Tipo
                             </span>
                             <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
                                 <span className="w-5 h-5 rounded-full bg-white/60 text-emerald-700 grid place-items-center">3</span> Valor
