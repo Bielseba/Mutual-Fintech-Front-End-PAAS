@@ -300,7 +300,6 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                               .map((tx) => {
                                 const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
                                 const feeAmount = tx.feeAmount || 0;
-                                const originalAmount = tx.originalAmount || tx.totalAmount || Math.abs(tx.amount);
                                 
                                 // Encontrar entrada de taxa relacionada (mesmo e2e/merOrderNo/orderNo e data próxima)
                                 const relatedFee = transactions.find(t => {
@@ -321,6 +320,8 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                                 });
                                 
                                 const displayFeeAmount = relatedFee ? Math.abs(relatedFee.amount) : feeAmount;
+                                const baseAmount = Math.abs(tx.amount);
+                                const totalAmount = baseAmount + (displayFeeAmount || 0);
                                 
                                 return (
                                     <React.Fragment key={tx.id}>
@@ -346,9 +347,9 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                                                             Taxa: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(displayFeeAmount)}
                                                         </span>
                                                     )}
-                                                    {isCredit && originalAmount > Math.abs(tx.amount) && (
+                                                    {totalAmount > baseAmount && (
                                                         <span className="text-xs text-slate-500">
-                                                            Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(originalAmount)}
+                                                            {isCredit ? 'Total:' : 'Total debitado:'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)}
                                                         </span>
                                                     )}
                                                 </div>
