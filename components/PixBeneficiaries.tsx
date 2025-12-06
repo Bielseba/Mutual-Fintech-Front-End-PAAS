@@ -173,7 +173,8 @@ export default function PixBeneficiaries() {
                     pix_key: b.pix_key,
                     key_type: String(b.key_type || 'chave'),
                   })
-                  window.location.href = `/pix-out?${params.toString()}`
+                  // SPA-safe: redirect to root with query so Sacar abre
+                  window.location.href = `/?${params.toString()}`
                 }}>Enviar Pix</button>
               </div>
             </div>
