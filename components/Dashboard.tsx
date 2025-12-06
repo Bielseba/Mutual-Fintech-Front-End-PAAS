@@ -144,11 +144,11 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 </div>
             </div>
             {showSummary && (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-emerald-50 rounded-xl"><ArrowDownLeft className="w-5 h-5 text-emerald-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Entrada (meta)</span>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-emerald-50 rounded-xl shrink-0"><ArrowDownLeft className="w-5 h-5 text-emerald-600" /></div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Entrada (meta)</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(income)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Saldo mês</p>
@@ -158,8 +158,8 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                     <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl -mr-10 -mt-10" />
                     <div className="relative z-10">
                         <div className="flex items-center gap-3 mb-2">
-                            <div className="p-2 bg-white/10 rounded-xl"><Wallet className="w-5 h-5 text-indigo-300" /></div>
-                            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Saldo Disponível</span>
+                            <div className="p-2 bg-white/10 rounded-xl shrink-0"><Wallet className="w-5 h-5 text-indigo-300" /></div>
+                            <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Disponível</span>
                         </div>
                         <h2 className="text-3xl font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balance)}</h2>
                         <p className="text-xs text-slate-300 mt-1">Para usar</p>
@@ -167,36 +167,36 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-rose-50 rounded-xl"><ArrowUpRight className="w-5 h-5 text-rose-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Saídas (meta)</span>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-rose-50 rounded-xl shrink-0"><ArrowUpRight className="w-5 h-5 text-rose-600" /></div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saídas (meta)</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(expenses)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Saldo mês</p>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-slate-50 rounded-xl"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Saldo Bloqueado</span>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Bloqueado</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(0)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Bloqueado</p>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-slate-50 rounded-xl"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Saldo Garantia</span>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ShieldAlert className="w-5 h-5 text-slate-600" /></div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Saldo Garantia</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(0)}</h2>
                     <p className="text-xs text-slate-400 mt-2">Reservado</p>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-slate-50 rounded-xl"><ArrowDownLeft className="w-5 h-5 text-slate-600" /></div>
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Número de transações</span>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-slate-50 rounded-xl shrink-0"><ArrowDownLeft className="w-5 h-5 text-slate-600" /></div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block truncate">Número de transações</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900">{transactions.length}</h2>
                     <p className="text-xs text-slate-400 mt-2">Total no sistema</p>
