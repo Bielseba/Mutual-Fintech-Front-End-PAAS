@@ -31,6 +31,11 @@ export interface Transaction {
   // Legacy fields kept for compatibility if needed, but marked optional
   customerName?: string;
   pixKey?: string;
+  // Taxa e valores da transação
+  originalAmount?: number; // Valor original da transação (antes da taxa)
+  totalAmount?: number; // Valor total da transação (com taxa aplicada)
+  finalAmount?: number; // Valor final creditado/debitado
+  feeAmount?: number; // Valor da taxa
 }
 
 export interface MedSummary {

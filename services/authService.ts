@@ -408,9 +408,39 @@ export const authService = {
           }
         }
         
+        // Extrair valores de taxa e valores totais do meta
+        // IMPORTANTE: Se meta for string, tentar parsear
+        let parsedMeta = meta;
+        if (typeof meta === 'string') {
+          try {
+            parsedMeta = JSON.parse(meta);
+          } catch {
+            // Tentar parsear como JSONB do PostgreSQL
+            try {
+              parsedMeta = JSON.parse(meta.replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+            } catch {
+              parsedMeta = {};
+            }
+          }
+        }
+
+        const originalAmount = typeof parsedMeta.originalAmount === 'number' ? parsedMeta.originalAmount : undefined;
+        const totalAmount = typeof parsedMeta.totalAmount === 'number' ? parsedMeta.totalAmount : undefined;
+        const finalAmount = typeof parsedMeta.finalAmount === 'number' ? parsedMeta.finalAmount : undefined;
+        const feeAmount = typeof parsedMeta.feeAmount === 'number' ? parsedMeta.feeAmount : undefined;
+        
+        // Para exibição: usar totalAmount se disponível (valor total da transação), senão usar originalAmount, senão usar amount
+        // O amount no ledger é o valor que foi creditado/debitado (já com taxa aplicada)
+        // Mas queremos exibir o valor total da transação
+        const displayAmount = totalAmount !== undefined 
+          ? totalAmount 
+          : (originalAmount !== undefined 
+            ? originalAmount 
+            : Math.abs(rawAmount));
+        
         return {
           id: tx.id || tx._id || 'TX-UNK',
-          amount,
+          amount: direction === 'DEBIT' ? -Math.abs(displayAmount) : Math.abs(displayAmount), // Exibir valor total da transação
           date: created,
           description: formattedDescription,
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
@@ -421,7 +451,12 @@ export const authService = {
           document: tx.meta?.document || tx.document || undefined,
           payerName: tx.meta?.payer_name || tx.meta?.payerName || tx.payer_name || tx.payerName || undefined,
           providerOrderNo: tx.meta?.providerOrderNo || tx.providerOrderNo || undefined,
-          balanceAfter
+          balanceAfter,
+          // Adicionar informações de taxa e valores
+          originalAmount: originalAmount || totalAmount || Math.abs(rawAmount), // Valor original da transação
+          totalAmount: totalAmount || originalAmount || Math.abs(rawAmount), // Valor total da transação (com taxa)
+          finalAmount: finalAmount || Math.abs(rawAmount), // Valor final creditado/debitado (após taxa)
+          feeAmount
         } as Transaction;
       });
   },
