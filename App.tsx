@@ -12,6 +12,7 @@ import { FeesPage } from './components/FeesPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { CryptoOTC } from './components/CryptoOTC';
 import PixBeneficiaries from './components/PixBeneficiaries';
+import Favorites from './components/Favorites';
 import { ViewState, User as UserType } from './types';
 import { authService } from './services/authService';
 
@@ -375,6 +376,7 @@ const App: React.FC = () => {
                 <NavButton active={view === 'pix'} onClick={() => setView('pix')} icon={QrCode} label="Depositar (Pix In)" />
                 <NavButton active={view === 'withdraw'} onClick={() => setView('withdraw')} icon={Landmark} label="Sacar (Pix Out)" />
                 <NavButton active={view === 'beneficiaries'} onClick={() => setView('beneficiaries')} icon={Users} label="Pix Favorecidos" />
+                <NavButton active={view === 'favorites'} onClick={() => setView('favorites')} icon={Users} label="Favorecidos" />
                 <NavButton active={view === 'crypto'} onClick={() => setView('crypto')} icon={Bitcoin} label="Cripto OTC" />
                 <NavButton active={view === 'med'} onClick={() => setView('med')} icon={ShieldAlert} label="Gestão MED" />
                 <NavButton active={view === 'fees'} onClick={() => setView('fees')} icon={Percent} label="Tarifas" />
@@ -558,6 +560,7 @@ const App: React.FC = () => {
               {(view === 'pix' || view === 'withdraw') && <PixTransfer mode={view} onBack={() => setView('dashboard')} />}
               {view === 'reports' && <Reports />}
               {view === 'beneficiaries' && <PixBeneficiaries />}
+                  {view === 'favorites' && <Favorites />}
            </div>
         </main>
 

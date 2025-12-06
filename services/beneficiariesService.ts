@@ -134,3 +134,64 @@ export async function removeBeneficiary(id: number, userId?: number): Promise<{ 
   }
   return parseJsonSafe(res)
 }
+
+export async function updateBeneficiary(id: number, payload: {
+  name?: string
+  bank_name?: string | null
+  document?: string | null
+  pix_key?: string
+  key_type?: string | null
+}, userId?: number): Promise<Beneficiary> {
+  const token = getAuthToken()
+  if (!token) throw new Error('Token ausente. Faça login para editar favorecido.')
+  if (!userId || !Number.isFinite(userId)) {
+    throw new Error('ID do usuário ausente para edição. Faça login novamente.')
+  }
+  const baseHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+    ...(userId && Number.isFinite(userId) ? { 'x-user-id': String(userId) } : {}),
+  }
+  const headers = (window as any)?.authService?.getBasicHeaders?.() || baseHeaders
+  const url = `${API_BASE}/api/users/${userId}/beneficiaries/${id}`
+  let res: Response | null = null
+  // Prefer PUT for full updates
+  res = await fetch(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+    mode: 'cors',
+    referrerPolicy: 'no-referrer',
+  })
+  // Try PATCH if PUT not allowed
+  if (!res.ok) {
+    res = await fetch(url, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(payload),
+      mode: 'cors',
+      referrerPolicy: 'no-referrer',
+    })
+  }
+  // Fallbacks to authenticated and public routes
+  if (!res.ok) {
+    const urlAuth = `${API_BASE}/api/beneficiaries/${id}`
+    res = await fetch(urlAuth, { method: 'PUT', headers, body: JSON.stringify(payload), mode: 'cors', referrerPolicy: 'no-referrer' })
+    if (!res.ok) {
+      res = await fetch(urlAuth, { method: 'PATCH', headers, body: JSON.stringify(payload), mode: 'cors', referrerPolicy: 'no-referrer' })
+    }
+  }
+  if (!res.ok) {
+    const urlPub = `${API_BASE}/api/beneficiaries-public/${id}?userId=${userId}`
+    res = await fetch(urlPub, { method: 'PUT', headers, body: JSON.stringify(payload), mode: 'cors', referrerPolicy: 'no-referrer' })
+    if (!res.ok) {
+      res = await fetch(urlPub, { method: 'PATCH', headers, body: JSON.stringify(payload), mode: 'cors', referrerPolicy: 'no-referrer' })
+    }
+  }
+  if (!res || !res.ok) {
+    const text = res ? (await res.text().catch(() => '')) : ''
+    throw new Error(`Falha ao editar favorecido (HTTP ${res?.status ?? 'NA'}) ${text || ''}`.trim())
+  }
+  return parseJsonSafe(res)
+}

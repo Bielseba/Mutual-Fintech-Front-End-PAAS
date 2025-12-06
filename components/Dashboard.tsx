@@ -235,7 +235,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                           <button
                             key={a.key}
                             onClick={() => {
-                                                                                                                        const soonKeys = ['pix-copy-paste','pix-refund','favorites','authorizations'];
+                                                                                                                        const soonKeys = ['pix-copy-paste','pix-refund','authorizations'];
                                                             if (soonKeys.includes(a.key)) {
                                                                 console.log('Coming soon clicked:', a.key, a.label);
                                                                 setComingSoon(a.label);
