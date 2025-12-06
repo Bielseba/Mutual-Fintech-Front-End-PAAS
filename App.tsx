@@ -105,7 +105,12 @@ const App: React.FC = () => {
           } else {
             setIsLoggedIn(true);
             setCurrentUser(savedUser);
-            setView('dashboard');
+                        const params = new URLSearchParams(window.location.search);
+                        if (params.get('pix_key')) {
+                            setView('withdraw');
+                        } else {
+                            setView('dashboard');
+                        }
           }
         }
         setIsAppLoading(false);

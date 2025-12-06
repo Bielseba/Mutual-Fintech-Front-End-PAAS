@@ -21,7 +21,7 @@ export default function PixBeneficiaries() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
-  const [step, setStep] = useState<'list' | 'create' | 'confirm' | 'pin' | 'done'>('list')
+  const [step, setStep] = useState<'list' | 'create' | 'confirm' | 'done'>('list')
   const [form, setForm] = useState({ name: '', bank_name: '', document: '', pix_key: '', key_type: 'chave' })
   const [pending, setPending] = useState<Beneficiary | null>(null)
 
@@ -29,7 +29,21 @@ export default function PixBeneficiaries() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listBeneficiaries()
+      const uidFromAuth = (window as any)?.authService?.getCurrentUser?.()?.id
+      const uidFromStorage = Number(localStorage.getItem('omi_user_id') || '')
+      let userId = Number.isFinite(uidFromAuth) ? Number(uidFromAuth) : (Number.isFinite(uidFromStorage) ? uidFromStorage : undefined)
+      if (!userId) {
+        const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
+        if (token.includes('.')) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            const subId = Number(payload?.userId || payload?.sub)
+            if (Number.isFinite(subId)) userId = subId
+          } catch {}
+        }
+      }
+      if (!userId) throw new Error('ID do usuário não encontrado. Faça login novamente.')
+      const data = await listBeneficiaries(userId)
       setItems(data)
     } catch (e: any) {
       setError(e.message || 'Erro ao carregar favorecidos')
@@ -41,23 +55,39 @@ export default function PixBeneficiaries() {
   useEffect(() => { refresh() }, [])
 
   async function onCreate() {
-    setLoading(true)
+    // Não salvar ainda; apenas preparar para confirmar
     setError(null)
-    try {
-      const created = await createBeneficiary(form)
-      setPending(created)
-      setStep('confirm')
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    const beneficiaryDraft: Beneficiary = {
+      id: 0,
+      name: form.name,
+      bank_name: form.bank_name,
+      document: form.document,
+      pix_key: form.pix_key,
+      key_type: (form as any).key_type || 'chave',
+      user_id: Number(localStorage.getItem('omi_user_id') || 0) || undefined as any,
+    } as any
+    setPending(beneficiaryDraft)
+    setStep('confirm')
   }
 
   async function onRemove(id: number) {
     setLoading(true)
     try {
-      await removeBeneficiary(id)
+      const uidFromAuth = (window as any)?.authService?.getCurrentUser?.()?.id
+      const uidFromStorage = Number(localStorage.getItem('omi_user_id') || '')
+      let userId = Number.isFinite(uidFromAuth) ? Number(uidFromAuth) : (Number.isFinite(uidFromStorage) ? uidFromStorage : undefined)
+      if (!userId) {
+        const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
+        if (token.includes('.')) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            const subId = Number(payload?.userId || payload?.sub)
+            if (Number.isFinite(subId)) userId = subId
+          } catch {}
+        }
+      }
+      if (!userId) throw new Error('ID do usuário não encontrado. Faça login novamente.')
+      await removeBeneficiary(id, userId)
       await refresh()
     } finally {
       setLoading(false)
@@ -74,15 +104,37 @@ export default function PixBeneficiaries() {
     )
   }, [items, query])
 
+  const steps = [
+    { key: 'list', title: 'Digitar', index: 1 },
+    { key: 'confirm', title: 'Confirmar', index: 2 },
+    { key: 'done', title: 'Finalização', index: 3 },
+  ] as const
+
   const Stepper = (
     <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
       <div className="flex items-center justify-between">
-        {[{k:'list',t:'Digitar'},{k:'confirm',t:'Confirmar'},{k:'pin',t:'Senha'},{k:'done',t:'Finalização'}].map((s, idx) => (
-          <div key={s.k} className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step===s.k?'bg-indigo-600 text-white':'bg-slate-100 text-slate-500'}`}>{idx+1}</div>
-            <span className="text-sm text-slate-600">{s.t}</span>
-          </div>
-        ))}
+        {steps.map((s, idx) => {
+          const isActive = step === s.key
+          const currentIndex = steps.findIndex(st => st.key === step)
+          const isCompleted = currentIndex > idx
+          const circleClass = isActive
+            ? 'bg-indigo-600 text-white'
+            : isCompleted
+              ? 'bg-green-600 text-white'
+              : 'bg-slate-200 text-slate-700'
+          const barClass = isCompleted ? 'bg-green-600' : 'bg-slate-200'
+          return (
+            <div key={s.key} className="flex items-center gap-3">
+              <div className="flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${circleClass}`}>{s.index}</div>
+                <div className={`mt-1 text-xs ${isActive ? 'text-indigo-700 font-semibold' : 'text-slate-600'}`}>{s.title}</div>
+              </div>
+              {idx < steps.length - 1 && (
+                <div className={`w-14 h-[2px] rounded ${barClass}`}></div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -106,29 +158,27 @@ export default function PixBeneficiaries() {
         {error && <div className="text-red-600">{error}</div>}
         <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
           {filtered.map(b => (
-            <div key={b.id} className="border border-slate-200 rounded-xl p-3 hover:bg-slate-50">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-semibold">{shortName(b.name)}</div>
-                  <div className="text-xs text-slate-500">{b.bank_name || '-'}</div>
-                  <div className="mt-1 flex gap-2">
-                    <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600">{(b.document||'').length>11?'CNPJ':'CPF'}</span>
-                    <span className="text-xs text-slate-600">{maskDocument(b.document)}</span>
-                  </div>
-                  <div className="mt-1 text-sm">
-                    Chave: <span className="font-mono">{b.pix_key.length > 22 ? b.pix_key.slice(0, 22) + '…' : b.pix_key}</span>
-                    <button className="ml-2" onClick={() => navigator.clipboard.writeText(b.pix_key)} title="Copiar">
-                      <ClipboardCopy size={16}/>
-                    </button>
-                  </div>
-                </div>
-                <button className="text-red-600" onClick={() => onRemove(b.id)} title="Remover">
-                  <Trash2 size={16}/>
-                </button>
+            <div key={b.id} className="flex items-center justify-between border rounded-xl p-3">
+              <div>
+                <div className="font-semibold">{shortName(b.name)}</div>
+                <div className="text-sm text-slate-600">{b.bank_name || '-'} • {maskDocument(b.document)}</div>
+                <div className="text-xs text-slate-500">{b.pix_key}</div>
+              </div>
+              <div className="flex gap-2">
+                <button className="px-2 py-1 border rounded" onClick={() => onRemove(b.id)}>Excluir</button>
+                <button className="px-2 py-1 bg-indigo-600 text-white rounded" onClick={() => {
+                  const params = new URLSearchParams({
+                    beneficiaryId: String(b.id),
+                    name: b.name,
+                    pix_key: b.pix_key,
+                    key_type: String(b.key_type || 'chave'),
+                  })
+                  window.location.href = `/pix-out?${params.toString()}`
+                }}>Enviar Pix</button>
               </div>
             </div>
           ))}
-          {filtered.length===0 && <div className="text-slate-500 text-sm">Nenhum favorecido encontrado.</div>}
+          {filtered.length===0 && <div className="text-slate-500">Nenhum favorecido encontrado.</div>}
         </div>
         <div className="mt-4">
           <button className="w-full py-3 bg-slate-400 text-white rounded-xl font-semibold">Continuar</button>
@@ -170,39 +220,86 @@ export default function PixBeneficiaries() {
     </div>
   )
 
+  async function finalizeSave() {
+    try {
+      setLoading(true)
+      setError(null)
+      const uidFromAuth = (window as any)?.authService?.getCurrentUser?.()?.id
+      const uidFromStorage = Number(localStorage.getItem('omi_user_id') || '')
+      let userId = Number.isFinite(uidFromAuth) ? Number(uidFromAuth) : (Number.isFinite(uidFromStorage) ? uidFromStorage : undefined)
+      if (!userId) {
+        const token = (window as any)?.authService?.getToken?.() || localStorage.getItem('omi_token') || ''
+        if (token.includes('.')) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            const subId = Number(payload?.userId || payload?.sub)
+            if (Number.isFinite(subId)) userId = subId
+          } catch {}
+        }
+      }
+      if (!userId) throw new Error('ID do usuário não encontrado. Faça login novamente.')
+      if (!pending) throw new Error('Nenhum favorecido para salvar.')
+      const created = await createBeneficiary({
+        name: pending.name,
+        bank_name: pending.bank_name || '',
+        document: pending.document || '',
+        pix_key: pending.pix_key,
+        key_type: pending.key_type || 'chave',
+      } as any, userId)
+      setPending(created)
+      setStep('done')
+    } catch (e: any) {
+      setError(e.message || 'Falha ao salvar favorecido.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const ConfirmView = (
-    <div className="space-y-4 max-w-xl">
-      <h2 className="text-lg font-semibold">Confirmar dados</h2>
-      {pending && (
-        <div className="border rounded p-3 space-y-2">
-          <div><b>Nome:</b> {pending.name}</div>
-          <div><b>Documento:</b> {maskDocument(pending.document)}</div>
-          <div><b>Banco:</b> {pending.bank_name || '-'}</div>
-          <div><b>Chave:</b> <span className="font-mono">{pending.pix_key}</span></div>
+    <div className="space-y-4 max-w-2xl">
+      <div className="p-3 bg-blue-50 text-blue-700 rounded-xl text-sm">Revise os dados do favorecido e avance para senha.</div>
+      {Stepper}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <h2 className="text-lg font-semibold mb-4">Confirmar dados</h2>
+        {pending && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-slate-600">Nome</label>
+              <div className="mt-1 p-3 border rounded-xl bg-slate-50">{pending.name}</div>
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Banco</label>
+              <div className="mt-1 p-3 border rounded-xl bg-slate-50">{pending.bank_name || '-'}</div>
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Documento</label>
+              <div className="mt-1 p-3 border rounded-xl bg-slate-50">{maskDocument(pending.document)}</div>
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Chave PIX</label>
+              <div className="mt-1 p-3 border rounded-xl bg-slate-50 font-mono break-all">{pending.pix_key}</div>
+            </div>
+          </div>
+        )}
+        <div className="mt-6 flex gap-2">
+          <button className="px-3 py-2 bg-green-600 text-white rounded" onClick={finalizeSave}>Confirmar e salvar</button>
+          <button className="px-3 py-2 border rounded" onClick={() => { setPending(null); setStep('create') }}>Voltar</button>
         </div>
-      )}
-      <div className="flex gap-2">
-        <button className="px-3 py-2 bg-green-600 text-white rounded" onClick={() => setStep('pin')}>Confirmar</button>
-        <button className="px-3 py-2 border rounded" onClick={() => { setPending(null); setStep('create') }}>Voltar</button>
       </div>
     </div>
   )
 
-  const PinView = (
-    <div className="space-y-4 max-w-sm">
-      <h2 className="text-lg font-semibold">Digite sua senha</h2>
-      <input type="password" className="border p-2 rounded w-full" placeholder="Senha" onKeyDown={e => { if (e.key === 'Enter') setStep('done') }} />
-      <div className="flex gap-2">
-        <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => setStep('done')}>Finalizar</button>
-        <button className="px-3 py-2 border rounded" onClick={() => setStep('confirm')}>Voltar</button>
-      </div>
-    </div>
-  )
 
   const DoneView = (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Favorecido salvo com sucesso</h2>
-      <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => { setStep('list'); setPending(null); refresh() }}>Ver lista</button>
+    <div className="space-y-4 max-w-2xl">
+      {Stepper}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <h2 className="text-lg font-semibold">Favorecido salvo com sucesso</h2>
+        <p className="text-slate-600">Você pode enviar Pix ou voltar para a lista.</p>
+        <div className="mt-6 flex gap-2">
+          <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => { setStep('list'); setPending(null); refresh() }}>Ver lista</button>
+        </div>
+      </div>
     </div>
   )
 
@@ -211,7 +308,6 @@ export default function PixBeneficiaries() {
       {step === 'list' && ListView}
       {step === 'create' && CreateView}
       {step === 'confirm' && ConfirmView}
-      {step === 'pin' && PinView}
       {step === 'done' && DoneView}
     </div>
   )

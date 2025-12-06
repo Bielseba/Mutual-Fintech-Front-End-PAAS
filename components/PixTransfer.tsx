@@ -62,6 +62,23 @@ export const PixTransfer: React.FC<PixTransferProps> = ({ mode, onBack }) => {
     });
   }, [mode]);
 
+  // Prefill for withdraw from URL query params
+  useEffect(() => {
+    if (mode !== 'withdraw') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const pixKey = params.get('pix_key') || '';
+      const keyType = params.get('key_type') || '';
+      if (pixKey) {
+        setFormData(prev => ({
+          ...prev,
+          pixKey,
+          pixKeyType: keyType ? keyType.toUpperCase() : prev.pixKeyType,
+        }));
+      }
+    } catch {}
+  }, [mode]);
+
   // Cleanup do polling ao desmontar
   useEffect(() => {
     return () => {

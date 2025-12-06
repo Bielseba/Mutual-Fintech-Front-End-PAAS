@@ -9,8 +9,12 @@ import {
   UserFees,
 } from "../types";
 
-// API URL Funcional (Backend Real)
-const API_URL = "https://mutual-fintech-user-service.vercel.app/api";
+
+const API_URL = (
+  (import.meta as any)?.env?.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' ? (window as any)?.API_BASE_URL : undefined) ||
+  "https://mutual-fintech-user-service.vercel.app/api"
+);
 
 async function fetchWithRetry(
   url: string,
@@ -38,8 +42,9 @@ async function requestWithRouteDiscovery(
   options: RequestInit
 ): Promise<Response> {
   const candidates = [
-    `${API_URL}/auth/${basePath}`, // /api/auth/login
-    `${API_URL}/${basePath}`, // /api/login
+    `${API_URL}/auth/user/${basePath}`, // e.g. /api/auth/user/login
+    `${API_URL}/auth/${basePath}`,      // e.g. /api/auth/login
+    `${API_URL}/${basePath}`,           // e.g. /api/login
   ];
 
   let lastError: any;
@@ -81,7 +86,7 @@ export const authService = {
     return { appId, appSecret };
   },
 
-  // Headers básicos para leitura (GET)
+
   getBasicHeaders() {
     const token = localStorage.getItem("mutual_token");
     if (!token) throw new Error("Usuário não autenticado.");
@@ -194,9 +199,19 @@ export const authService = {
     // --- CORREÇÃO: SALVAR userId NO LOCALSTORAGE NO LOGIN ---
     const idToSave = normalizedUser.id || rawUser.id || rawUser.userId || rawUser.user_id;
     if (idToSave) {
-        localStorage.setItem("userId", String(idToSave));
+      localStorage.setItem("userId", String(idToSave));
+      localStorage.setItem("omi_user_id", String(idToSave));
+    } else if (token && token.includes('.')) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const subId = payload?.userId || payload?.sub;
+        if (subId) {
+          localStorage.setItem("userId", String(subId));
+          localStorage.setItem("omi_user_id", String(subId));
+        }
+      } catch {}
     } else {
-        console.warn("UserID não encontrado na resposta de login para salvar.");
+      console.warn("UserID não encontrado na resposta de login para salvar.");
     }
 
     return {
@@ -275,9 +290,7 @@ export const authService = {
     return null;
   },
 
-  async rotateCredentials(userId: string | number): Promise<any> {
-     return this.getCredentials(userId); 
-  },
+    // Removido: rotação de credenciais no frontend (não utilizada)
 
   async getWalletBalance(userId: string | number): Promise<number> {
      try {
@@ -560,78 +573,40 @@ export const authService = {
       }));
   },
 
-  async getMyFees(): Promise<UserFees | null> {
+    async getMyFees(): Promise<UserFees | null> {
       try {
-          console.log('[getMyFees] === INÍCIO FRONTEND ===');
-          const token = this.getToken();
-          const user = this.getUser();
-          console.log('[getMyFees] Token presente?', !!token);
-          console.log('[getMyFees] User do localStorage:', user);
-          
-          const headers = this.getBasicHeaders();
-          console.log('[getMyFees] Headers preparados:', {
-              authorization: headers.Authorization ? 'Bearer ***' : 'ausente',
-              app_id: headers.app_id || 'ausente',
-              client_id: headers.client_id || 'ausente'
-          });
-          
-          const url = `${API_URL}/me/fees`;
-          console.log('[getMyFees] URL da requisição:', url);
-          
-          const res = await fetch(url, { headers: headers as any });
-          console.log('[getMyFees] Status da resposta:', res.status, res.statusText);
-          console.log('[getMyFees] Headers da resposta:', Object.fromEntries(res.headers.entries()));
-          
-          if (!res.ok) {
-              const errorText = await res.text();
-              console.error('[getMyFees] ❌ Erro HTTP:', res.status, res.statusText);
-              console.error('[getMyFees] Corpo da resposta de erro:', errorText);
-              return null;
-          }
-          
-          const json = await res.json();
-          console.log('[getMyFees] Resposta JSON completa:', JSON.stringify(json, null, 2));
-          
-          if (json.ok && json.data) {
-              const result = { 
-                  userId: json.data.userId, 
-                  pixInPercent: Number(json.data.pixInPercent) || 0, 
-                  pixOutPercent: Number(json.data.pixOutPercent) || 0,
-                  pixInFeeType: json.data.pixInFeeType || 'PERCENT',
-                  pixInFeeValue: Number(json.data.pixInFeeValue) || 0,
-                  pixOutFeeType: json.data.pixOutFeeType || 'PERCENT',
-                  pixOutFeeValue: Number(json.data.pixOutFeeValue) || 0
-              };
-              console.log('[getMyFees] ✅ Dados parseados:', result);
-              return result;
-          }
-          
-          // Fallback: tentar ler diretamente se não estiver em json.data
-          if (json.pixInPercent !== undefined || json.pixOutPercent !== undefined) {
-              const result = {
-                  userId: json.userId || null,
-                  pixInPercent: Number(json.pixInPercent) || 0,
-                  pixOutPercent: Number(json.pixOutPercent) || 0,
-                  pixInFeeType: json.pixInFeeType || 'PERCENT',
-                  pixInFeeValue: Number(json.pixInFeeValue) || 0,
-                  pixOutFeeType: json.pixOutFeeType || 'PERCENT',
-                  pixOutFeeValue: Number(json.pixOutFeeValue) || 0
-              };
-              console.log('[getMyFees] ✅ Dados parseados (fallback):', result);
-              return result;
-          }
-          
-          console.warn('[getMyFees] ⚠️ Formato de resposta inesperado:', json);
-          return null;
-      } catch (error) {
-          console.error('[getMyFees] ❌ Erro na requisição:', error);
-          if (error instanceof Error) {
-              console.error('[getMyFees] Mensagem de erro:', error.message);
-              console.error('[getMyFees] Stack:', error.stack);
-          }
-          return null;
+        const headers = this.getBasicHeaders();
+        const url = `${API_URL}/me/fees`;
+        const res = await fetch(url, { headers: headers as any });
+        if (!res.ok) return null;
+        const json = await res.json();
+        if (json.ok && json.data) {
+          return {
+            userId: json.data.userId,
+            pixInPercent: Number(json.data.pixInPercent) || 0,
+            pixOutPercent: Number(json.data.pixOutPercent) || 0,
+            pixInFeeType: json.data.pixInFeeType || 'PERCENT',
+            pixInFeeValue: Number(json.data.pixInFeeValue) || 0,
+            pixOutFeeType: json.data.pixOutFeeType || 'PERCENT',
+            pixOutFeeValue: Number(json.data.pixOutFeeValue) || 0
+          };
+        }
+        if (json.pixInPercent !== undefined || json.pixOutPercent !== undefined) {
+          return {
+            userId: json.userId || null,
+            pixInPercent: Number(json.pixInPercent) || 0,
+            pixOutPercent: Number(json.pixOutPercent) || 0,
+            pixInFeeType: json.pixInFeeType || 'PERCENT',
+            pixInFeeValue: Number(json.pixInFeeValue) || 0,
+            pixOutFeeType: json.pixOutFeeType || 'PERCENT',
+            pixOutFeeValue: Number(json.pixOutFeeValue) || 0
+          };
+        }
+        return null;
+      } catch {
+        return null;
       }
-  },
+    },
 
   logout() {
     localStorage.removeItem("mutual_token");
