@@ -286,7 +286,7 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                                             </div>
                                         </td>
                                         <td className={`px-6 py-4 text-right font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                            {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                            {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
                                         </td>
                                     </tr>
                                 );
