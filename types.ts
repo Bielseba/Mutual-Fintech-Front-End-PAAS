@@ -28,6 +28,8 @@ export interface Transaction {
   document?: string; // Raw document from ledger/meta
   payerName?: string; // PIX payer name from meta
   providerOrderNo?: string; // Provider external id
+  merOrderNo?: string; // Merchant order number
+  orderNo?: string; // Order number
   // Legacy fields kept for compatibility if needed, but marked optional
   customerName?: string;
   pixKey?: string;
@@ -36,6 +38,7 @@ export interface Transaction {
   totalAmount?: number; // Valor total da transação (com taxa aplicada)
   finalAmount?: number; // Valor final creditado/debitado
   feeAmount?: number; // Valor da taxa
+  isFeeEntry?: boolean; // Indica se esta entrada é apenas a taxa
 }
 
 export interface MedSummary {

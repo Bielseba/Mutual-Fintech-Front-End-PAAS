@@ -515,8 +515,13 @@ export const TransactionHistory: React.FC = () => {
         return Number(t.amount) > 0;
     };
 
+    // Filtrar entradas de taxa para contagem de transações (não contar como transação separada)
+    const mainTransactions = filteredTx.filter(t => !(t as any).isFeeEntry);
+    const feeEntries = filteredTx.filter(t => (t as any).isFeeEntry);
+    
+    // Para cálculos: incluir todas as entradas (principal + taxa)
     const subtotal = {
-        totalTransactions: filteredTx.length,
+        totalTransactions: mainTransactions.length, // Contar apenas transações principais
         totalReceived: filteredTx.filter(isCreditTx).reduce((acc, t) => acc + Math.abs(t.amount), 0),
         totalSent: filteredTx.filter(isDebitTx).reduce((acc, t) => acc + Math.abs(t.amount), 0),
     };
@@ -901,7 +906,9 @@ export const TransactionHistory: React.FC = () => {
                         <div className="sm:hidden space-y-3">
                             {filteredTx.length === 0 ? (
                                 <div className="p-4 text-center text-slate-400">Nenhum registro encontrado para este filtro.</div>
-                            ) : filteredTx.map((tx, index) => {
+                            ) : filteredTx
+                              .filter(tx => !(tx as any).isFeeEntry) // Filtrar entradas de taxa (serão exibidas junto com a transação principal)
+                              .map((tx, index) => {
                                 const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
                                 const tipoLabel = isCredit ? 'Entrada' : 'Saída';
                                 const clienteFull = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
@@ -918,15 +925,45 @@ export const TransactionHistory: React.FC = () => {
                                 const externo = (tx as any).providerOrderNo || (tx as any).externalId || (tx as any).referenceId || (tx as any).external || '-';
                                 const shortE2E = e2e !== '-' ? String(e2e).slice(0, 10) : '-';
                                 const shortExterno = externo !== '-' ? String(externo).slice(0, 10) : '-';
+                                // Encontrar entrada de taxa relacionada
+                                const relatedFee = filteredTx.find(t => {
+                                  if (!(t as any).isFeeEntry) return false;
+                                  const tIsDebit = t.type === 'DEBIT' || t.amount < 0;
+                                  const txIsDebit = tx.type === 'DEBIT' || tx.amount < 0;
+                                  if (tIsDebit !== txIsDebit) return false;
+                                  const sameE2E = t.e2e && tx.e2e && t.e2e === tx.e2e;
+                                  const sameMerOrderNo = (t as any).merOrderNo && (tx as any).merOrderNo && (t as any).merOrderNo === (tx as any).merOrderNo;
+                                  const sameOrderNo = (t as any).orderNo && (tx as any).orderNo && (t as any).orderNo === (tx as any).orderNo;
+                                  const closeDate = Math.abs(new Date(t.date).getTime() - new Date(tx.date).getTime()) < 5000;
+                                  return sameE2E || sameMerOrderNo || sameOrderNo || closeDate;
+                                });
+                                
+                                const feeAmount = relatedFee ? Math.abs(relatedFee.amount) : ((tx as any).feeAmount || 0);
+                                
                                 const runningBalance = (() => {
                                     const balAfter = (tx as any).balanceAfter;
                                     if (typeof balAfter === 'number' && !isNaN(balAfter)) return Number(balAfter);
-                                    const sumIn = filteredTx.slice(0, index + 1)
+                                    
+                                    // Encontrar o índice real da transação em filteredTx (incluindo taxas)
+                                    const realIndex = filteredTx.findIndex(t => t.id === tx.id);
+                                    if (realIndex === -1) return 0;
+                                    
+                                    const sumIn = filteredTx.slice(0, realIndex + 1)
                                         .filter(t => (t.type === 'CREDIT' || t.amount > 0))
                                         .reduce((acc, t) => acc + Math.abs(t.amount), 0);
-                                    const sumOut = filteredTx.slice(0, index + 1)
+                                    const sumOut = filteredTx.slice(0, realIndex + 1)
                                         .filter(t => (t.type === 'DEBIT' || t.amount < 0))
                                         .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                    
+                                    // Se houver taxa relacionada, incluir no cálculo
+                                    if (relatedFee) {
+                                      if (relatedFee.type === 'DEBIT' || relatedFee.amount < 0) {
+                                        return sumIn - (sumOut + Math.abs(relatedFee.amount));
+                                      } else {
+                                        return (sumIn + Math.abs(relatedFee.amount)) - sumOut;
+                                      }
+                                    }
+                                    
                                     return sumIn - sumOut;
                                 })();
                                 return (
@@ -962,8 +999,27 @@ export const TransactionHistory: React.FC = () => {
                                             <div className="text-slate-500"><span className="font-bold">Documento:</span> {documento}</div>
                                         </div>
                                         <div className="mt-3 grid grid-cols-2 gap-2 items-center">
-                                            <div className={`text-[13px] font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                            <div className={`text-[13px] ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-bold">
+                                                        {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                                    </span>
+                                                    {feeAmount > 0 && (
+                                                        <span className="text-[11px] text-amber-600 font-medium">
+                                                            Taxa: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeAmount)}
+                                                        </span>
+                                                    )}
+                                                    {isCredit && tx.originalAmount && tx.originalAmount > Math.abs(tx.amount) && (
+                                                        <span className="text-[11px] text-slate-500">
+                                                            Total depositado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
+                                                        </span>
+                                                    )}
+                                                    {!isCredit && feeAmount > 0 && (
+                                                        <span className="text-[11px] text-slate-500">
+                                                            Total debitado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount) + feeAmount)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className={`text-[13px] font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(runningBalance)}
@@ -1010,9 +1066,32 @@ export const TransactionHistory: React.FC = () => {
                         <tbody className="divide-y divide-slate-50">
                             {filteredTx.length === 0 ? (
                                 <tr><td colSpan={11} className="p-8 text-center text-slate-400">Nenhum registro encontrado para este filtro.</td></tr>
-                            ) : filteredTx.map((tx, index) => {
+                            ) : filteredTx
+                              .filter(tx => !(tx as any).isFeeEntry) // Filtrar entradas de taxa (serão exibidas junto com a transação principal)
+                              .map((tx, index) => {
                             const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
                             const tipoLabel = isCredit ? 'Entrada' : 'Saída';
+                            
+                            // Encontrar entrada de taxa relacionada (mesmo e2e/merOrderNo/orderNo e data próxima)
+                            const relatedFee = filteredTx.find(t => {
+                              if (!(t as any).isFeeEntry) return false;
+                              
+                              // Verificar se é do mesmo tipo (DEBIT ou CREDIT)
+                              const tIsDebit = t.type === 'DEBIT' || t.amount < 0;
+                              const txIsDebit = tx.type === 'DEBIT' || tx.amount < 0;
+                              if (tIsDebit !== txIsDebit) return false;
+                              
+                              // Verificar correspondência por e2e, merOrderNo, orderNo ou data próxima
+                              const sameE2E = t.e2e && tx.e2e && t.e2e === tx.e2e;
+                              const sameMerOrderNo = (t as any).merOrderNo && (tx as any).merOrderNo && (t as any).merOrderNo === (tx as any).merOrderNo;
+                              const sameOrderNo = (t as any).orderNo && (tx as any).orderNo && (t as any).orderNo === (tx as any).orderNo;
+                              const closeDate = Math.abs(new Date(t.date).getTime() - new Date(tx.date).getTime()) < 5000;
+                              
+                              return sameE2E || sameMerOrderNo || sameOrderNo || closeDate;
+                            });
+                            
+                            const feeAmount = relatedFee ? Math.abs(relatedFee.amount) : ((tx as any).feeAmount || 0);
+                            
                             const clienteFull = (tx as any).payerName || (tx as any).clientName || (tx as any).customer || tx.recipient || tx.sender || '-';
                             const cliente = (() => {
                                 if (!clienteFull || clienteFull === '-') return '-';
@@ -1032,13 +1111,30 @@ export const TransactionHistory: React.FC = () => {
                                 // Prefer balance provided by backend meta
                                 const balAfter = (tx as any).balanceAfter;
                                 if (typeof balAfter === 'number' && !isNaN(balAfter)) return Number(balAfter);
+                                
                                 // Fallback: saldo acumulado no período até esta linha (base 0)
-                                const sumIn = filteredTx.slice(0, index + 1)
+                                // Incluir todas as transações (principal + taxa) para cálculo correto
+                                // Encontrar o índice real da transação em filteredTx (incluindo taxas)
+                                const realIndex = filteredTx.findIndex(t => t.id === tx.id);
+                                if (realIndex === -1) return 0;
+                                
+                                // Calcular saldo considerando todas as transações até este ponto (incluindo taxas)
+                                const sumIn = filteredTx.slice(0, realIndex + 1)
                                     .filter(t => (t.type === 'CREDIT' || t.amount > 0))
                                     .reduce((acc, t) => acc + Math.abs(t.amount), 0);
-                                const sumOut = filteredTx.slice(0, index + 1)
+                                const sumOut = filteredTx.slice(0, realIndex + 1)
                                     .filter(t => (t.type === 'DEBIT' || t.amount < 0))
                                     .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+                                
+                                // Se houver taxa relacionada, incluir no cálculo
+                                if (relatedFee) {
+                                  if (relatedFee.type === 'DEBIT' || relatedFee.amount < 0) {
+                                    return sumIn - (sumOut + Math.abs(relatedFee.amount));
+                                  } else {
+                                    return (sumIn + Math.abs(relatedFee.amount)) - sumOut;
+                                  }
+                                }
+                                
                                 return sumIn - sumOut;
                             })();
                             return (
@@ -1097,8 +1193,27 @@ export const TransactionHistory: React.FC = () => {
                                     </div>
                                 </td>
                                 <td className="px-2 sm:px-3 py-3 sm:py-4 text-slate-700 font-medium hidden sm:table-cell">{documento}</td>
-                                <td className={`px-2 sm:px-4 py-3 sm:py-4 font-bold text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                <td className={`px-2 sm:px-4 py-3 sm:py-4 text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="font-bold">
+                                            {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                        </span>
+                                        {feeAmount > 0 && (
+                                            <span className="text-xs text-amber-600 font-medium">
+                                                Taxa: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeAmount)}
+                                            </span>
+                                        )}
+                                        {isCredit && tx.originalAmount && tx.originalAmount > Math.abs(tx.amount) && (
+                                            <span className="text-xs text-slate-500">
+                                                Total depositado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.originalAmount)}
+                                            </span>
+                                        )}
+                                        {!isCredit && feeAmount > 0 && (
+                                            <span className="text-xs text-slate-500">
+                                                Total debitado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount) + feeAmount)}
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className={`px-2 sm:px-3 py-3 sm:py-4 font-bold text-right ${runningBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(runningBalance)}

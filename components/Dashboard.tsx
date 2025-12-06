@@ -270,25 +270,67 @@ export const Dashboard: React.FC<{ onNavigate: (view: any) => void }> = ({ onNav
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <tbody className="divide-y divide-slate-50">
-                            {transactions.slice(0, 5).map((tx) => {
+                            {transactions
+                              .filter(tx => !(tx as any).isFeeEntry) // Filtrar entradas de taxa (serão exibidas junto com a transação principal)
+                              .slice(0, 5)
+                              .map((tx) => {
                                 const isCredit = tx.type === 'CREDIT' || (tx.type !== 'DEBIT' && tx.amount > 0);
+                                const feeAmount = tx.feeAmount || 0;
+                                const originalAmount = tx.originalAmount || tx.totalAmount || Math.abs(tx.amount);
+                                
+                                // Encontrar entrada de taxa relacionada (mesmo e2e/merOrderNo/orderNo e data próxima)
+                                const relatedFee = transactions.find(t => {
+                                  if (!(t as any).isFeeEntry) return false;
+                                  
+                                  // Verificar se é do mesmo tipo (DEBIT ou CREDIT)
+                                  const tIsDebit = t.type === 'DEBIT' || t.amount < 0;
+                                  const txIsDebit = tx.type === 'DEBIT' || tx.amount < 0;
+                                  if (tIsDebit !== txIsDebit) return false;
+                                  
+                                  // Verificar correspondência por e2e, merOrderNo, orderNo ou data próxima
+                                  const sameE2E = t.e2e && tx.e2e && t.e2e === tx.e2e;
+                                  const sameMerOrderNo = (t as any).merOrderNo && (tx as any).merOrderNo && (t as any).merOrderNo === (tx as any).merOrderNo;
+                                  const sameOrderNo = (t as any).orderNo && (tx as any).orderNo && (t as any).orderNo === (tx as any).orderNo;
+                                  const closeDate = Math.abs(new Date(t.date).getTime() - new Date(tx.date).getTime()) < 5000;
+                                  
+                                  return sameE2E || sameMerOrderNo || sameOrderNo || closeDate;
+                                });
+                                
+                                const displayFeeAmount = relatedFee ? Math.abs(relatedFee.amount) : feeAmount;
+                                
                                 return (
-                                    <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg ${isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                    {isCredit ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                                    <React.Fragment key={tx.id}>
+                                        <tr className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                        {isCredit ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-900">{cleanDescription(tx.description, tx.type, tx.amount)}</p>
+                                                        <p className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString()} • {new Date(tx.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-slate-900">{cleanDescription(tx.description, tx.type, tx.amount)}</p>
-                                                    <p className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString()} • {new Date(tx.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                            </td>
+                                            <td className={`px-6 py-4 text-right ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className="font-bold">
+                                                        {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                                                    </span>
+                                                    {displayFeeAmount > 0 && (
+                                                        <span className="text-xs text-amber-600 font-medium">
+                                                            Taxa: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(displayFeeAmount)}
+                                                        </span>
+                                                    )}
+                                                    {isCredit && originalAmount > Math.abs(tx.amount) && (
+                                                        <span className="text-xs text-slate-500">
+                                                            Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(originalAmount)}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className={`px-6 py-4 text-right font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                            {isCredit ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                                        </td>
-                                    </tr>
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
                                 );
                             })}
                             {transactions.length === 0 && (

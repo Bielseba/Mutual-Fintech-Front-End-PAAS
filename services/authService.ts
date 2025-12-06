@@ -428,19 +428,40 @@ export const authService = {
         const totalAmount = typeof parsedMeta.totalAmount === 'number' ? parsedMeta.totalAmount : undefined;
         const finalAmount = typeof parsedMeta.finalAmount === 'number' ? parsedMeta.finalAmount : undefined;
         const feeAmount = typeof parsedMeta.feeAmount === 'number' ? parsedMeta.feeAmount : undefined;
+        const netAmount = typeof parsedMeta.netAmount === 'number' ? parsedMeta.netAmount : undefined;
         
-        // Para exibição: usar totalAmount se disponível (valor total da transação), senão usar originalAmount, senão usar amount
-        // O amount no ledger é o valor que foi creditado/debitado (já com taxa aplicada)
-        // Mas queremos exibir o valor total da transação
-        const displayAmount = totalAmount !== undefined 
-          ? totalAmount 
-          : (originalAmount !== undefined 
-            ? originalAmount 
-            : Math.abs(rawAmount));
+        // Determinar se é uma entrada de taxa
+        const isFeeEntry = parsedMeta.feeType === 'TRANSACTION_FEE' || 
+                          parsedMeta.transactionType === 'PIX_IN_FEE' || 
+                          parsedMeta.transactionType === 'PIX_OUT_FEE' ||
+                          /Taxa de transação/i.test(formattedDescription);
+        
+        // Para exibição:
+        // - Se for entrada de taxa: exibir apenas a taxa
+        // - Para depósitos (CREDIT): exibir valor líquido creditado (netAmount ou amount)
+        // - Para saques (DEBIT): exibir valor líquido debitado (netAmount ou amount)
+        // - Se não houver netAmount, usar amount (que já é o valor líquido após separação)
+        let displayAmount = Math.abs(rawAmount);
+        
+        if (!isFeeEntry) {
+          // Para transações principais (não-taxa):
+          // - Depósitos: exibir valor líquido creditado (netAmount ou amount)
+          // - Saques: exibir valor líquido sacado (netAmount ou amount)
+          if (direction === 'CREDIT') {
+            // Depósito: exibir valor líquido creditado
+            displayAmount = netAmount !== undefined ? netAmount : Math.abs(rawAmount);
+          } else {
+            // Saque: exibir valor líquido sacado
+            displayAmount = netAmount !== undefined ? netAmount : Math.abs(rawAmount);
+          }
+        } else {
+          // Para entradas de taxa: exibir o valor da taxa
+          displayAmount = feeAmount !== undefined ? feeAmount : Math.abs(rawAmount);
+        }
         
         return {
           id: tx.id || tx._id || 'TX-UNK',
-          amount: direction === 'DEBIT' ? -Math.abs(displayAmount) : Math.abs(displayAmount), // Exibir valor total da transação
+          amount: direction === 'DEBIT' ? -Math.abs(displayAmount) : Math.abs(displayAmount),
           date: created,
           description: formattedDescription,
           type: direction === 'DEBIT' ? 'DEBIT' : 'CREDIT',
@@ -451,12 +472,15 @@ export const authService = {
           document: tx.meta?.document || tx.document || undefined,
           payerName: tx.meta?.payer_name || tx.meta?.payerName || tx.payer_name || tx.payerName || undefined,
           providerOrderNo: tx.meta?.providerOrderNo || tx.providerOrderNo || undefined,
+          merOrderNo: tx.meta?.merOrderNo || tx.merOrderNo || undefined,
+          orderNo: tx.meta?.orderNo || tx.orderNo || undefined,
           balanceAfter,
-          // Adicionar informações de taxa e valores
-          originalAmount: originalAmount || totalAmount || Math.abs(rawAmount), // Valor original da transação
-          totalAmount: totalAmount || originalAmount || Math.abs(rawAmount), // Valor total da transação (com taxa)
-          finalAmount: finalAmount || Math.abs(rawAmount), // Valor final creditado/debitado (após taxa)
-          feeAmount
+          // Informações de taxa e valores
+          originalAmount: originalAmount || (direction === 'CREDIT' ? (netAmount !== undefined ? netAmount + (feeAmount || 0) : undefined) : (netAmount !== undefined ? netAmount : undefined)), // Valor original da transação
+          totalAmount: totalAmount || (direction === 'CREDIT' ? (netAmount !== undefined ? netAmount + (feeAmount || 0) : undefined) : (netAmount !== undefined ? netAmount + (feeAmount || 0) : undefined)), // Valor total da transação (com taxa)
+          finalAmount: finalAmount || netAmount || Math.abs(rawAmount), // Valor final creditado/debitado (líquido)
+          feeAmount: isFeeEntry ? Math.abs(rawAmount) : feeAmount, // Valor da taxa
+          isFeeEntry // Flag para identificar entradas de taxa
         } as Transaction;
       });
   },
